@@ -1,0 +1,65 @@
+[
+  {
+    "id": "present-perfect",
+    "title": "Present Perfect",
+    "category": "Grammar",
+    "description": "Understand form, meaning and common IELTS uses of the present perfect tense.",
+    "level": "Intermediate",
+    "duration": "12 min",
+    "imageKey": "present-perfect",
+    "audioKey": "present-perfect-audio",
+    "pdfKey": "present-perfect-pdf",
+    "sections": [
+      {
+        "heading": "Core rule",
+        "body": "Use have or has with the past participle when the action connects the past with the present."
+      },
+      {
+        "heading": "IELTS use",
+        "body": "This tense is useful in speaking and writing when you describe experience, change, and achievements."
+      }
+    ]
+  },
+  {
+    "id": "ielts-speaking-tips",
+    "title": "IELTS Speaking Tips",
+    "category": "Speaking",
+    "description": "Build longer answers with examples, linking words and natural pacing.",
+    "level": "Upper-intermediate",
+    "duration": "9 min",
+    "imageKey": "speaking-tips",
+    "audioKey": "speaking-tips-audio",
+    "pdfKey": "speaking-tips-pdf",
+    "sections": [
+      {
+        "heading": "Answer structure",
+        "body": "Give a direct answer first, then extend it with a reason, an example and a short conclusion."
+      },
+      {
+        "heading": "Fluency focus",
+        "body": "Practice small pauses between ideas instead of stopping after every sentence."
+      }
+    ]
+  },
+  {
+    "id": "travel-vocabulary",
+    "title": "Vocabulary for Travel",
+    "category": "Vocabulary",
+    "description": "Learn practical travel words, collocations and topic language for speaking tasks.",
+    "level": "Intermediate",
+    "duration": "11 min",
+    "imageKey": "travel-vocabulary",
+    "audioKey": "travel-vocabulary-audio",
+    "pdfKey": "travel-vocabulary-pdf",
+    "sections": [
+      {
+        "heading": "Useful collocations",
+        "body": "Common combinations include public transport, boarding pass, travel itinerary and local cuisine."
+      },
+      {
+        "heading": "Speaking extension",
+        "body": "Do not only name the place. Add what you saw, how you travelled and why the trip was memorable."
+      }
+    ]
+  }
+]

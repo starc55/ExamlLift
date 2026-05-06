@@ -1,0 +1,45 @@
+{
+  "vocabulary": [
+    {
+      "id": "v1",
+      "prompt": "Choose the best synonym for 'rapid'.",
+      "options": ["Slow", "Quick", "Heavy", "Late"],
+      "answer": "Quick"
+    },
+    {
+      "id": "v2",
+      "prompt": "Which word best completes the phrase: 'make a ___'?",
+      "options": ["decision", "rain", "window", "grammar"],
+      "answer": "decision"
+    },
+    {
+      "id": "v3",
+      "prompt": "Which word is most related to travel?",
+      "options": ["Passport", "Recipe", "Lecture", "Forest"],
+      "answer": "Passport"
+    }
+  ],
+  "grammar": [
+    {
+      "id": "g1",
+      "prompt": "She ___ to London twice this year.",
+      "options": ["has been", "was", "go", "being"],
+      "answer": "has been"
+    },
+    {
+      "id": "g2",
+      "prompt": "If I had more time, I ___ another lesson.",
+      "options": ["study", "will study", "would study", "studied"],
+      "answer": "would study"
+    },
+    {
+      "id": "g3",
+      "prompt": "The book ___ by the teacher yesterday.",
+      "options": ["gave", "was given", "is give", "gives"],
+      "answer": "was given"
+    }
+  ],
+  "speaking": {
+    "prompt": "Describe a skill you have recently learned and explain why it is useful."
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "listening": {
+    "audioKey": "listening-practice-audio",
+    "questions": [
+      {
+        "id": "l1",
+        "prompt": "What is the student's main goal?",
+        "options": [
+          "Find a job",
+          "Improve English",
+          "Move house",
+          "Join a club"
+        ],
+        "answer": "Improve English"
+      },
+      {
+        "id": "l2",
+        "prompt": "When will the next lesson happen?",
+        "options": ["Monday", "Wednesday", "Friday", "Sunday"],
+        "answer": "Wednesday"
+      }
+    ]
+  },
+  "reading": {
+    "title": "Learning Through Habit",
+    "passage": "Students often improve faster when they study in short daily sessions. Regular exposure helps memory, reduces stress and builds confidence over time. Teachers also note that learners who review errors immediately usually avoid repeating the same mistake in later tasks.",
+    "questions": [
+      {
+        "id": "r1",
+        "prompt": "What helps memory according to the passage?",
+        "options": [
+          "Long weekly sessions",
+          "Daily short study",
+          "No review",
+          "Extra stress"
+        ],
+        "answer": "Daily short study"
+      },
+      {
+        "id": "r2",
+        "prompt": "What do teachers notice about reviewing errors?",
+        "options": [
+          "It wastes time",
+          "It causes confusion",
+          "It reduces repeated mistakes",
+          "It lowers confidence"
+        ],
+        "answer": "It reduces repeated mistakes"
+      }
+    ]
+  },
+  "writing": {
+    "prompt": "Some people believe students learn better in groups, while others prefer independent study. Give your opinion."
+  },
+  "speaking": {
+    "prompt": "Describe a place that motivates you to study and explain why it helps your concentration."
+  }
+}

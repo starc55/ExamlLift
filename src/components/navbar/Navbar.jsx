@@ -3,7 +3,6 @@ import { HiArrowRightOnRectangle, HiBars3 } from "react-icons/hi2";
 import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getActiveUser, logoutUser } from "../../services/auth/localAuth";
-import BrandLogo from "../BrandLogo";
 
 const titles = {
   "/dashboard": "Dashboard",
@@ -45,9 +44,7 @@ function Navbar({ onMenuToggle }) {
           initial={{ scale: 0.92, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.1, duration: 0.25 }}
-        >
-          <BrandLogo className="navbar__logo" alt="University logo" />
-        </motion.div>
+        ></motion.div>
         <div className="navbar__title-block">
           <p className="eyebrow-1">English Learning Platform</p>
           <h2>{title}</h2>

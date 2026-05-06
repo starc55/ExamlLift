@@ -22,7 +22,7 @@ export function registerUser(payload) {
     name: payload.name,
     email: payload.email,
     password: payload.password,
-    targetBand: payload.targetBand || "6.5"
+    targetBand: payload.targetBand || "6.5",
   };
 
   users.push(user);

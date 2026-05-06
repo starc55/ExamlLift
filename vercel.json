@@ -3,5 +3,11 @@
   "framework": "vite",
   "installCommand": "npm install",
   "buildCommand": "node ./node_modules/vite/bin/vite.js build",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }

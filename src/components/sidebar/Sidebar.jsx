@@ -18,10 +18,8 @@ const navItems = [
 function Sidebar({ isOpen, onClose }) {
   return (
     <>
-      <motion.aside
+      <aside
         className={`sidebar ${isOpen ? "sidebar--open" : ""}`}
-        initial={false}
-        animate={{ x: 0 }}
       >
         <motion.div
           className="sidebar__brand"
@@ -70,12 +68,13 @@ function Sidebar({ isOpen, onClose }) {
         >
           <span>EXAMLIFT v0.1</span>
         </motion.div>
-      </motion.aside>
+      </aside>
       <AnimatePresence>
         {isOpen ? (
           <motion.button
             className="sidebar__backdrop"
             onClick={onClose}
+            aria-label="Close sidebar"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

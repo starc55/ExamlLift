@@ -4,7 +4,7 @@ function SpeakingRecorder({
   title,
   prompt,
   feedbackLabel = "Speaking Feedback",
-  onEvaluate
+  onEvaluate,
 }) {
   const [isRecording, setIsRecording] = useState(false);
   const [audioUrl, setAudioUrl] = useState("");
@@ -28,6 +28,11 @@ function SpeakingRecorder({
   const startRecording = async () => {
     setError("");
     setFeedback("");
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("This browser does not support the MediaRecorder API.");
+      return;
+    }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -60,7 +65,7 @@ function SpeakingRecorder({
       recorder.start();
       setIsRecording(true);
     } catch (recordingError) {
-      setError("Microphone access berilmadi yoki browser recordingni qo‘llamadi.");
+      setError("Microphone access was denied or recording is not supported.");
     }
   };
 
@@ -91,7 +96,9 @@ function SpeakingRecorder({
           </button>
         )}
       </div>
-      {audioUrl ? <audio controls src={audioUrl} className="audio-player__native" /> : null}
+      {audioUrl ? (
+        <audio controls src={audioUrl} className="audio-player__native" />
+      ) : null}
       {error ? <p className="error-text">{error}</p> : null}
       {feedback ? (
         <div className="inline-feedback">

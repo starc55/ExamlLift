@@ -1,6 +1,6 @@
 export function buildFeedback({ scoreLine, mistakes, suggestions }) {
   return [
-    "Overall score:",
+    "Overall evaluation:",
     scoreLine,
     "",
     "Mistakes:",

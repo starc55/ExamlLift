@@ -1,36 +1,30 @@
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  FaChartLine,
-  FaFileLines,
-  FaGraduationCap,
-  FaHouse,
-} from "react-icons/fa6";
 import { NavLink } from "react-router-dom";
+import { navigationByRole } from "../../config/navigation";
+import { ROLE_LABELS } from "../../constants/roles";
+import { useAuth } from "../../context/AuthContext";
 import BrandLogo from "../BrandLogo";
 
-const navItems = [
-  { to: "/dashboard", label: "Dashboard", icon: FaHouse },
-  { to: "/content", label: "Content", icon: FaFileLines },
-  { to: "/midterm", label: "Midterm", icon: FaChartLine },
-  { to: "/final", label: "Final Exam", icon: FaGraduationCap },
-];
-
 function Sidebar({ isOpen, onClose }) {
+  const { currentUser } = useAuth();
+  const navItems = navigationByRole[currentUser?.role] || [];
+
   return (
     <>
-      <aside
-        className={`sidebar ${isOpen ? "sidebar--open" : ""}`}
-      >
+      <aside className={`sidebar ${isOpen ? "sidebar--open" : ""}`}>
         <motion.div
           className="sidebar__brand"
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
         >
-          <BrandLogo className="sidebar__logo" alt="University logo" />
+          <BrandLogo
+            className="sidebar__logo"
+            alt="English learning platform"
+          />
           <div>
             <strong>ExamLift</strong>
-            <p>Raise your score</p>
+            <p>{ROLE_LABELS[currentUser?.role] || "Learning"} workspace</p>
           </div>
         </motion.div>
         <nav className="sidebar__nav">
@@ -66,7 +60,7 @@ function Sidebar({ isOpen, onClose }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.3 }}
         >
-          <span>EXAMLIFT v0.1</span>
+          <p>ExamLift v0.1</p>
         </motion.div>
       </aside>
       <AnimatePresence>

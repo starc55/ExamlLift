@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import LoadingScreen from "./components/LoadingScreen";
+import { AuthProvider } from "./context/AuthContext";
 import AppRouter from "./routes/AppRouter";
 
 function App() {
@@ -17,7 +18,11 @@ function App() {
     return <LoadingScreen />;
   }
 
-  return <AppRouter />;
+  return (
+    <AuthProvider>
+      <AppRouter />
+    </AuthProvider>
+  );
 }
 
 export default App;

@@ -1,4 +1,16 @@
 function PDFViewer({ src, title }) {
+  if (!src) {
+    return (
+      <div className="pdf-viewer">
+        <div className="pdf-viewer__header">
+          <h4>{title}</h4>
+          <span>PDF missing</span>
+        </div>
+        <p className="empty-copy">PDF source has not been uploaded yet.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="pdf-viewer">
       <div className="pdf-viewer__header">

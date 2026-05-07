@@ -1,15 +1,15 @@
-import { Navigate, useLocation } from "react-router-dom";
-import { getActiveUser } from "../services/auth/localAuth";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute() {
   const location = useLocation();
-  const user = getActiveUser();
+  const { currentUser } = useAuth();
 
-  if (!user) {
+  if (!currentUser) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  return children;
+  return <Outlet />;
 }
 
 export default ProtectedRoute;

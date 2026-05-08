@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import AudioPlayer from "../../components/audio/AudioPlayer";
+import FeedbackCard from "../../components/feedback/FeedbackCard";
 import PDFViewer from "../../components/pdf/PDFViewer";
 import { useAuth } from "../../context/AuthContext";
 import {
   getAssignmentsForStudent,
   submitAssignment,
 } from "../../services/content/assignmentService";
+import { getAssignmentFeedback } from "../../services/ai/assignmentFeedback";
 import { getAllContent } from "../../services/content/contentService";
 import { fileToDataUrl } from "../../utils/fileHelpers";
 
@@ -23,6 +25,7 @@ function StudentContentDetailPage() {
   const [assignmentFileName, setAssignmentFileName] = useState("");
   const [assignmentMessage, setAssignmentMessage] = useState("");
   const [assignmentMessageTone, setAssignmentMessageTone] = useState("success");
+  const [latestAiFeedback, setLatestAiFeedback] = useState("");
   const [isSubmittingAssignment, setIsSubmittingAssignment] = useState(false);
   const assignmentInputId = "student-assignment-file";
 
@@ -51,8 +54,16 @@ function StudentContentDetailPage() {
 
     try {
       const fileUrl = await fileToDataUrl(assignmentFile);
+      const aiFeedback = getAssignmentFeedback({
+        note: assignmentNote,
+        fileName: assignmentFileName,
+        contentTitle: selectedContent.title,
+        taskTitle:
+          selectedContent.assignmentTitle ||
+          `${selectedContent.title} follow-up task`,
+      });
 
-      submitAssignment({
+      const savedAssignment = submitAssignment({
         contentId: selectedContent.id,
         contentTitle: selectedContent.title,
         taskTitle:
@@ -65,14 +76,16 @@ function StudentContentDetailPage() {
         note: assignmentNote,
         fileName: assignmentFileName,
         fileUrl,
+        aiFeedback,
       });
 
       setStudentAssignments(getAssignmentsForStudent(currentUser.id));
+      setLatestAiFeedback(savedAssignment.aiFeedback);
       setAssignmentNote("");
       setAssignmentFile(null);
       setAssignmentFileName("");
       setAssignmentMessage(
-        "The assignment has been sent to the teacher panel."
+        "The assignment has been sent to the teacher panel and AI feedback is ready."
       );
     } catch (error) {
       setAssignmentMessageTone("error");
@@ -223,6 +236,10 @@ function StudentContentDetailPage() {
               {isSubmittingAssignment ? "Sending..." : "Send to teacher"}
             </button>
           </form>
+          <FeedbackCard
+            title="Assignment AI feedback"
+            feedback={latestAiFeedback || latestAssignment?.aiFeedback}
+          />
         </section>
       </section>
     </div>

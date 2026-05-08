@@ -1,12 +1,18 @@
-export function buildFeedback({ scoreLine, mistakes, suggestions }) {
+export function buildFeedback({ scoreLine, mistakes, suggestions, labels = {} }) {
+  const {
+    overall = "Overall evaluation:",
+    mistakesTitle = "Mistakes:",
+    suggestionsTitle = "Suggestions:",
+  } = labels;
+
   return [
-    "Overall evaluation:",
+    overall,
     scoreLine,
     "",
-    "Mistakes:",
+    mistakesTitle,
     ...mistakes.map((item) => `* ${item}`),
     "",
-    "Suggestions:",
+    suggestionsTitle,
     ...suggestions.map((item) => `* ${item}`)
   ].join("\n");
 }

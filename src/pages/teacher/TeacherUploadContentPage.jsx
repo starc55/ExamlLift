@@ -1,6 +1,7 @@
 import { useState } from "react";
 import UploadForm from "../../components/content/UploadForm";
 import ContentCard from "../../components/content/ContentCard";
+import FeedbackCard from "../../components/feedback/FeedbackCard";
 import { useAuth } from "../../context/AuthContext";
 import {
   getAssignmentsForTeacher,
@@ -167,6 +168,10 @@ function TeacherUploadContentPage() {
                   <span>{new Date(assignment.submittedAt).toLocaleDateString()}</span>
                   <span>{assignment.fileName || "No file attached"}</span>
                 </div>
+                <FeedbackCard
+                  title="AI homework feedback"
+                  feedback={assignment.aiFeedback}
+                />
                 {assignment.status === "pending" ? (
                   <button
                     className="primary-button card-link"

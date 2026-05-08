@@ -6,13 +6,18 @@ import TestCard from "../../components/cards/TestCard";
 import Timer from "../../components/Timer";
 import QuestionCard from "../../components/tests/QuestionCard";
 import SpeakingRecorder from "../../components/tests/SpeakingRecorder";
+import VocabularyMatching from "../../components/tests/VocabularyMatching";
 import { useAuth } from "../../context/AuthContext";
+import { vocabularyMatchingData } from "../../data/tests/midtermVocabularyMatching";
 import { getGrammarFeedback } from "../../services/ai/grammarFeedback";
 import { getSpeakingFeedback } from "../../services/ai/speakingFeedback";
 import { getVocabularyFeedback } from "../../services/ai/vocabularyFeedback";
 import { saveResult } from "../../services/results/resultService";
 import { getTestByType } from "../../services/tests/testService";
-import { scoreMcqTest } from "../../utils/testHelpers";
+import {
+  scoreMcqTest,
+  scoreVocabularyMatchingTest,
+} from "../../utils/testHelpers";
 
 function StudentMidtermPage() {
   const { currentUser } = useAuth();
@@ -24,19 +29,19 @@ function StudentMidtermPage() {
     () => [
       {
         key: "vocabulary",
-        title: vocabularyTest.title,
+        title: "Vocabulary",
         description: vocabularyTest.instructions,
         duration: vocabularyTest.durationMinutes,
       },
       {
         key: "grammar",
-        title: grammarTest.title,
+        title: "Grammar",
         description: grammarTest.instructions,
         duration: grammarTest.durationMinutes,
       },
       {
         key: "speaking",
-        title: speakingTest.title,
+        title: "Speaking",
         description: speakingTest.instructions,
         duration: speakingTest.durationMinutes,
       },
@@ -49,9 +54,11 @@ function StudentMidtermPage() {
   const [completedSteps, setCompletedSteps] = useState([]);
   const [vocabularyAnswers, setVocabularyAnswers] = useState({});
   const [grammarAnswers, setGrammarAnswers] = useState({});
+  const [vocabularyResult, setVocabularyResult] = useState(null);
   const [vocabularyFeedback, setVocabularyFeedback] = useState("");
   const [grammarFeedback, setGrammarFeedback] = useState("");
   const [speakingFeedback, setSpeakingFeedback] = useState("");
+  const vocabularyData = vocabularyTest.matchingData || vocabularyMatchingData;
 
   const completionPercent = Math.round((completedSteps.length / steps.length) * 100);
 
@@ -66,9 +73,18 @@ function StudentMidtermPage() {
   };
 
   const handleVocabularySubmit = () => {
-    const result = scoreMcqTest(vocabularyTest.questions, vocabularyAnswers, vocabularyTest.score);
-    const feedback = getVocabularyFeedback({ percent: result.percent });
+    const result = scoreVocabularyMatchingTest(
+      vocabularyData.words,
+      vocabularyData.definitions,
+      vocabularyAnswers,
+      vocabularyTest.score
+    );
+    const feedback = getVocabularyFeedback({
+      percent: result.percent,
+      incorrectItems: result.incorrectItems,
+    });
 
+    setVocabularyResult(result);
     setVocabularyFeedback(feedback);
     markStepComplete("vocabulary");
     saveResult({
@@ -83,7 +99,6 @@ function StudentMidtermPage() {
       percent: result.percent,
       feedback,
     });
-    goToNextStep();
   };
 
   const handleGrammarSubmit = () => {
@@ -165,28 +180,21 @@ function StudentMidtermPage() {
               <TestCard
                 title={vocabularyTest.title}
                 description={vocabularyTest.instructions}
-                stats={`${vocabularyTest.questions.length} questions`}
+                stats={`${vocabularyData.words.length} terms`}
               >
-                <div className="question-list">
-                  {vocabularyTest.questions.map((question, index) => (
-                    <QuestionCard
-                      key={question.id}
-                      index={index}
-                      question={{ prompt: question.prompt, options: question.options }}
-                      namePrefix="vocabulary"
-                      selectedValue={vocabularyAnswers[question.id]}
-                      onChange={(value) =>
-                        setVocabularyAnswers((current) => ({
-                          ...current,
-                          [question.id]: value,
-                        }))
-                      }
-                    />
-                  ))}
-                </div>
-                <button className="primary-button" onClick={handleVocabularySubmit}>
-                  Submit and continue
-                </button>
+                <VocabularyMatching
+                  data={vocabularyData}
+                  answers={vocabularyAnswers}
+                  onAnswerChange={(wordId, value) =>
+                    setVocabularyAnswers((current) => ({
+                      ...current,
+                      [wordId]: value,
+                    }))
+                  }
+                  onSubmit={handleVocabularySubmit}
+                  result={vocabularyResult}
+                  onContinue={vocabularyResult ? goToNextStep : null}
+                />
               </TestCard>
               <FeedbackCard title="Vocabulary AI feedback" feedback={vocabularyFeedback} />
             </>

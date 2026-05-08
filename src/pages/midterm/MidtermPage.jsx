@@ -5,10 +5,13 @@ import FeedbackCard from "../../components/feedback/FeedbackCard";
 import ProgressBar from "../../components/ProgressBar";
 import Timer from "../../components/Timer";
 import SpeakingRecorder from "../../components/tests/SpeakingRecorder";
+import VocabularyMatching from "../../components/tests/VocabularyMatching";
 import midtermData from "../../data/tests/midterm.json";
+import { vocabularyMatchingData } from "../../data/tests/midtermVocabularyMatching";
 import { getVocabularyFeedback } from "../../services/ai/vocabularyFeedback";
 import { getGrammarFeedback } from "../../services/ai/grammarFeedback";
 import { getSpeakingFeedback } from "../../services/ai/speakingFeedback";
+import { scoreVocabularyMatchingTest } from "../../utils/testHelpers";
 
 function scoreAnswers(questions, answers) {
   const correctCount = questions.reduce((total, question, index) => {
@@ -36,10 +39,17 @@ function MidtermPage() {
   const completionPercent = Math.round((completedSections / 3) * 100);
 
   const handleVocabularySubmit = () => {
-    const result = scoreAnswers(midtermData.vocabulary, vocabularyAnswers);
+    const result = scoreVocabularyMatchingTest(
+      vocabularyMatchingData.words,
+      vocabularyMatchingData.definitions,
+      vocabularyAnswers
+    );
     setVocabularyResult({
       ...result,
-      feedback: getVocabularyFeedback(result)
+      feedback: getVocabularyFeedback({
+        percent: result.percent,
+        incorrectItems: result.incorrectItems,
+      })
     });
   };
 
@@ -65,34 +75,20 @@ function MidtermPage() {
       </section>
 
       <TestCard
-        title="1. Vocabulary Test"
-        description="Multiple-choice format with automatic scoring."
-        stats={`${midtermData.vocabulary.length} questions`}
+        title={vocabularyMatchingData.title}
+        description={vocabularyMatchingData.instruction}
+        stats={`${vocabularyMatchingData.words.length} terms`}
       >
-        <div className="question-list">
-          {midtermData.vocabulary.map((question, index) => (
-            <QuestionCard
-              key={question.id}
-              index={index}
-              question={question}
-              namePrefix="vocabulary"
-              selectedValue={vocabularyAnswers[index]}
-              onChange={(value) =>
-                setVocabularyAnswers((current) => ({ ...current, [index]: value }))
-              }
-            />
-          ))}
-        </div>
-        <div className="card-actions">
-          <button className="primary-button" onClick={handleVocabularySubmit}>
-            Check vocabulary score
-          </button>
-          {vocabularyResult ? (
-            <span className="pill">
-              {vocabularyResult.score}/{vocabularyResult.total}
-            </span>
-          ) : null}
-        </div>
+        <VocabularyMatching
+          data={vocabularyMatchingData}
+          answers={vocabularyAnswers}
+          onAnswerChange={(wordId, value) =>
+            setVocabularyAnswers((current) => ({ ...current, [wordId]: value }))
+          }
+          onSubmit={handleVocabularySubmit}
+          result={vocabularyResult}
+          submitLabel="Javoblarni yuborish"
+        />
       </TestCard>
       <FeedbackCard
         title="Vocabulary AI Feedback"

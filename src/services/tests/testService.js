@@ -1,26 +1,40 @@
 import finalData from "../../data/tests/final.json";
 import midtermData from "../../data/tests/midterm.json";
+import { vocabularyMatchingData } from "../../data/tests/midtermVocabularyMatching";
 import { contentAssets } from "../../assets/content/assetRegistry";
 import { readStorage, seedStorage, writeStorage } from "../shared/storage";
 
 const TESTS_KEY = "english-platform-tests";
+const vocabularyMatchingQuestions = vocabularyMatchingData.words.map((word) => ({
+  id: `vocab-match-${word.id}`,
+  prompt: word.term,
+  options: vocabularyMatchingData.definitions.map((definition) => definition.key),
+  correctAnswer: word.correct,
+}));
 
-const seededTests = [
-  {
+function buildMidtermVocabularyTest(overrides = {}) {
+  return {
     id: "test-vocabulary-1",
     type: "vocabulary",
     section: "midterm",
-    title: "Vocabulary Booster",
-    instructions: "Choose the best answer for each vocabulary question.",
+    title: vocabularyMatchingData.title,
+    stepTitle: "Vocabulary",
+    instructions: vocabularyMatchingData.instruction,
     durationMinutes: 12,
     score: 30,
-    questions: midtermData.vocabulary.map((question) => ({
-      id: question.id,
-      prompt: question.prompt,
-      options: question.options,
-      correctAnswer: question.answer,
-    })),
-  },
+    questions: vocabularyMatchingQuestions,
+    matchingData: vocabularyMatchingData,
+    ...overrides,
+    title: vocabularyMatchingData.title,
+    stepTitle: "Vocabulary",
+    instructions: vocabularyMatchingData.instruction,
+    questions: vocabularyMatchingQuestions,
+    matchingData: vocabularyMatchingData,
+  };
+}
+
+const seededTests = [
+  buildMidtermVocabularyTest(),
   {
     id: "test-grammar-1",
     type: "grammar",
@@ -118,13 +132,19 @@ export function getTestsBySection(section) {
 }
 
 export function getTestByType(type, section) {
-  return getAllTests().find((test) => {
+  const test = getAllTests().find((test) => {
     if (section) {
       return test.type === type && test.section === section;
     }
 
     return test.type === type;
   });
+
+  if (type === "vocabulary" && section === "midterm") {
+    return buildMidtermVocabularyTest(test || {});
+  }
+
+  return test;
 }
 
 export function createTest(payload) {

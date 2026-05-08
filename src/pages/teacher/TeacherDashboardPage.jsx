@@ -102,6 +102,12 @@ function TeacherDashboardPage() {
                 </div>
                 <p className="assignment-item__task">{assignment.taskTitle}</p>
                 <p>{assignment.note || "No note attached."}</p>
+                {assignment.aiFeedback ? (
+                  <div className="assignment-ai-summary">
+                    <strong>AI feedback</strong>
+                    <p>{assignment.aiFeedback.split("\n")[1] || assignment.aiFeedback}</p>
+                  </div>
+                ) : null}
               </article>
             ))
           ) : (

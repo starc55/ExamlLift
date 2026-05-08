@@ -16,6 +16,43 @@ export function scoreMcqTest(questions, answers, maxScore) {
   };
 }
 
+export function scoreVocabularyMatchingTest(words, definitions, answers, maxScore) {
+  const definitionMap = new Map(
+    definitions.map((definition) => [definition.key, definition.text])
+  );
+
+  const incorrectItems = words.reduce((items, word) => {
+    if (answers[word.id] === word.correct) {
+      return items;
+    }
+
+    items.push({
+      id: word.id,
+      term: word.term,
+      selectedKey: answers[word.id] || "",
+      selectedText: definitionMap.get(answers[word.id]) || "",
+      correctKey: word.correct,
+      correctText: definitionMap.get(word.correct) || "",
+    });
+
+    return items;
+  }, []);
+
+  const totalQuestions = words.length || 1;
+  const correctCount = totalQuestions - incorrectItems.length;
+  const percent = Math.round((correctCount / totalQuestions) * 100);
+  const score = Math.round((percent / 100) * (maxScore || totalQuestions));
+
+  return {
+    correctCount,
+    totalQuestions,
+    percent,
+    score,
+    maxScore: maxScore || totalQuestions,
+    incorrectItems,
+  };
+}
+
 export function getAttemptStatus(percent) {
   if (percent >= 80) {
     return "Excellent";

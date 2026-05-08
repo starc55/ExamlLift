@@ -965,6 +965,18 @@ pre {
   gap: 12px;
 }
 
+.vocabulary-matching,
+.vocabulary-matching__intro,
+.vocabulary-matching__grid,
+.vocabulary-matching__panel,
+.vocabulary-matching__rows,
+.vocabulary-matching__definitions,
+.vocabulary-matching__result,
+.vocabulary-matching__mistake-list {
+  display: grid;
+  gap: 14px;
+}
+
 .option-row {
   display: flex;
   align-items: center;
@@ -978,6 +990,136 @@ pre {
 .option-row:has(input:checked) {
   border-color: rgba(202, 162, 77, 0.65);
   background: #fff8e9;
+}
+
+.vocabulary-matching__intro p,
+.vocabulary-matching__definition span,
+.vocabulary-matching__mistake-item span {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.vocabulary-matching__grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.vocabulary-matching__panel {
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.vocabulary-matching__panel--definitions {
+  background:
+    linear-gradient(180deg, rgba(247, 252, 248, 0.98), rgba(240, 248, 242, 0.94));
+}
+
+.vocabulary-matching__panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  color: var(--primary-dark);
+  background: rgba(111, 18, 33, 0.08);
+}
+
+.vocabulary-matching__panel-header--accent {
+  background: rgba(47, 143, 99, 0.12);
+}
+
+.vocabulary-matching__panel-header h4,
+.vocabulary-matching__mistakes h4 {
+  margin: 0;
+  color: inherit;
+}
+
+.vocabulary-matching__panel-header span,
+.vocabulary-matching__summary {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.vocabulary-matching__row,
+.vocabulary-matching__definition,
+.vocabulary-matching__mistake-item {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(202, 162, 77, 0.2);
+  background: rgba(255, 252, 248, 0.96);
+}
+
+.vocabulary-matching__row {
+  grid-template-columns: minmax(0, 1fr) 112px;
+  align-items: center;
+}
+
+.vocabulary-matching__term {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  font-weight: 700;
+  color: var(--primary-dark);
+}
+
+.vocabulary-matching__number {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(202, 162, 77, 0.16);
+  color: var(--accent-deep);
+  flex-shrink: 0;
+}
+
+.vocabulary-matching__select {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(202, 162, 77, 0.3);
+  background: white;
+  color: var(--primary-dark);
+  outline: none;
+}
+
+.vocabulary-matching__select:focus {
+  border-color: rgba(47, 143, 99, 0.52);
+  box-shadow: 0 0 0 4px rgba(47, 143, 99, 0.12);
+}
+
+.vocabulary-matching__definition {
+  grid-template-columns: auto 1fr;
+  align-items: start;
+}
+
+.vocabulary-matching__definition strong {
+  color: var(--success);
+}
+
+.vocabulary-matching__summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.vocabulary-matching__actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.vocabulary-matching__actions .primary-button {
+  min-width: 220px;
 }
 
 .progress__track {
@@ -1147,6 +1289,25 @@ pre {
   color: var(--primary-dark);
 }
 
+.assignment-ai-summary {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(202, 162, 77, 0.22);
+  background: linear-gradient(180deg, rgba(247, 252, 248, 0.98), rgba(240, 248, 242, 0.94));
+}
+
+.assignment-ai-summary p,
+.assignment-ai-summary strong {
+  margin: 0;
+}
+
+.assignment-ai-summary p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .assignment-list {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
@@ -1312,6 +1473,10 @@ pre {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .vocabulary-matching__grid {
+    grid-template-columns: 1fr;
+  }
+
   .navbar__right {
     flex-wrap: wrap;
     justify-content: flex-end;
@@ -1405,6 +1570,10 @@ pre {
 
   .navbar__user {
     align-items: flex-start;
+  }
+
+  .vocabulary-matching__row {
+    grid-template-columns: 1fr;
   }
 
   .auth-card,

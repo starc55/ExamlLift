@@ -1,18 +1,40 @@
 import { buildFeedback } from "./feedbackUtils";
 
-export function getVocabularyFeedback({ percent }) {
+export function getVocabularyFeedback({ percent, incorrectItems = [] }) {
   const scoreLine =
-    percent >= 80 ? "Strong vocabulary control." : "Vocabulary needs more review.";
+    percent === 100
+      ? "Barcha vocabulary va definition juftliklari to'g'ri topildi."
+      : percent >= 80
+        ? "Vocabulary matching natijasi yaxshi, lekin ayrim juftliklarda aniqlikni oshirish kerak."
+        : "Vocabulary matching bo'limida qo'shimcha mashq qilish tavsiya etiladi.";
 
   const mistakes =
-    percent >= 80
-      ? ["A few distractor options still slowed you down.", "Synonym precision can improve."]
-      : ["Some word meanings were confused.", "Context clues were not used consistently."];
+    incorrectItems.length === 0
+      ? ["Juftliklarni tanlashda izchillik saqlandi."]
+      : [
+          `${incorrectItems.length} ta juftlikda mos definition noto'g'ri tanlandi.`,
+          "Ayrim military terms o'xshash ma'nolar bilan chalkashdi.",
+        ];
 
   const suggestions =
     percent >= 80
-      ? ["Review collocations for higher band answers.", "Keep a weekly synonym list."]
-      : ["Study words in short example sentences.", "Repeat 10 travel and academic words daily."];
+      ? [
+          "Terminlarni definition bilan birga qisqa flashcard formatida takrorlang.",
+          "O'xshash military vocabulary juftliklarini bir-biridan farqlashga e'tibor bering.",
+        ]
+      : [
+          "Har bir term uchun bitta kalit so'z yoki context yozib yodlang.",
+          "Definitiondagi asosiy action word'larni ajratib, keyin matchingni qayta bajaring.",
+        ];
 
-  return buildFeedback({ scoreLine, mistakes, suggestions });
+  return buildFeedback({
+    scoreLine,
+    mistakes,
+    suggestions,
+    labels: {
+      overall: "Umumiy baho:",
+      mistakesTitle: "Xatolar:",
+      suggestionsTitle: "Tavsiyalar:",
+    },
+  });
 }

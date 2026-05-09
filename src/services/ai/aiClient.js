@@ -13,7 +13,11 @@ async function requestJson(url, options) {
   const payload = await parseJsonResponse(response);
 
   if (!response.ok) {
-    throw new Error(payload?.error || AI_ERROR_MESSAGE);
+    const error = new Error(payload?.error || AI_ERROR_MESSAGE);
+    error.status = response.status;
+    error.details = payload?.details || null;
+    console.error("AI feedback error:", error.details || error.message);
+    throw error;
   }
 
   if (!payload) {
@@ -63,6 +67,10 @@ export async function getSpeakingFeedback(audioBlob, metadata = {}) {
 }
 
 export async function getTestFeedback(payload) {
+  if (!payload?.section) {
+    throw new Error("Section is required.");
+  }
+
   return requestJson("/api/ai-feedback", buildJsonRequest(payload));
 }
 

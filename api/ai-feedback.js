@@ -12,7 +12,12 @@ const CRITERIA_BY_SECTION = {
   writing: ["taskResponse", "coherence", "grammar", "vocabulary"],
   speaking: ["fluency", "vocabulary", "grammar", "pronunciation"],
   reading: ["comprehension", "detailAccuracy", "inference", "strategy"],
-  listening: ["comprehension", "detailListening", "keywordTracking", "noteTaking"],
+  listening: [
+    "comprehension",
+    "detailListening",
+    "keywordTracking",
+    "noteTaking",
+  ],
   grammar: ["accuracy", "grammarControl", "topicAwareness", "correctionSkill"],
   vocabulary: ["meaningMatch", "wordRecall", "precision", "memoryStrategy"],
   homework: ["completion", "accuracy", "communication", "improvementReadiness"],
@@ -162,7 +167,9 @@ export function buildReadingPrompt(payload = {}) {
   const wrongAnswers = stringifyWrongAnswers(
     payload.questionData?.wrongAnswers,
     (item) =>
-      `Question: ${item.question}; Student answer: ${item.studentAnswer || "-"}; Correct answer: ${item.correctAnswer}`
+      `Question: ${item.question}; Student answer: ${
+        item.studentAnswer || "-"
+      }; Correct answer: ${item.correctAnswer}`
   );
 
   return `${buildCommonPromptHeader("Reading")}
@@ -178,7 +185,9 @@ Result:
 
 Question context:
 - Passage title: ${payload.questionData?.passageTitle || "Unknown passage"}
-- Passage summary: ${payload.questionData?.passageSummary || "No summary provided"}
+- Passage summary: ${
+    payload.questionData?.passageSummary || "No summary provided"
+  }
 - Wrong answers:
 ${wrongAnswers}`;
 }
@@ -187,7 +196,9 @@ export function buildListeningPrompt(payload = {}) {
   const wrongAnswers = stringifyWrongAnswers(
     payload.questionData?.wrongAnswers,
     (item) =>
-      `Question: ${item.question}; Student answer: ${item.studentAnswer || "-"}; Correct answer: ${item.correctAnswer}`
+      `Question: ${item.question}; Student answer: ${
+        item.studentAnswer || "-"
+      }; Correct answer: ${item.correctAnswer}`
   );
 
   return `${buildCommonPromptHeader("Listening")}
@@ -211,7 +222,11 @@ export function buildGrammarPrompt(payload = {}) {
   const wrongAnswers = stringifyWrongAnswers(
     payload.questionData?.wrongAnswers,
     (item) =>
-      `Question: ${item.question}; Student answer: ${item.studentAnswer || "-"}; Correct answer: ${item.correctAnswer}; Topic: ${item.grammarTopic || "General grammar"}`
+      `Question: ${item.question}; Student answer: ${
+        item.studentAnswer || "-"
+      }; Correct answer: ${item.correctAnswer}; Topic: ${
+        item.grammarTopic || "General grammar"
+      }`
   );
 
   return `${buildCommonPromptHeader("Grammar")}
@@ -232,7 +247,11 @@ export function buildVocabularyPrompt(payload = {}) {
   const wrongAnswers = stringifyWrongAnswers(
     payload.questionData?.wrongAnswers,
     (item) =>
-      `Term: ${item.term}; Student answer: ${item.studentAnswer || "-"}; Correct answer: ${item.correctAnswer}; Meaning: ${item.correctDefinition || "Unknown"}`
+      `Term: ${item.term}; Student answer: ${
+        item.studentAnswer || "-"
+      }; Correct answer: ${item.correctAnswer}; Meaning: ${
+        item.correctDefinition || "Unknown"
+      }`
   );
 
   return `${buildCommonPromptHeader("Vocabulary")}
@@ -355,12 +374,20 @@ function normalizeAssessment(section, payload, parsed) {
   const normalized = {
     feedback: normalizeFeedbackText(parsed?.feedback),
     score: clampNumber(parsed?.score, 0, 100, 0),
-    band: parsed?.band == null ? null : roundToHalfBand(clampNumber(parsed.band, 0, 9, 0)),
+    band:
+      parsed?.band == null
+        ? null
+        : roundToHalfBand(clampNumber(parsed.band, 0, 9, 0)),
     criteria: normalizeCriteria(section, parsed?.criteria),
   };
 
   if (LOCAL_SECTIONS.has(section) || payload?.result?.percentage != null) {
-    normalized.score = clampNumber(payload.result?.percentage, 0, 100, normalized.score);
+    normalized.score = clampNumber(
+      payload.result?.percentage,
+      0,
+      100,
+      normalized.score
+    );
     normalized.band =
       payload.result?.percentage != null
         ? roundToHalfBand(percentageToBand(payload.result.percentage))
@@ -374,38 +401,93 @@ function normalizeAssessment(section, payload, parsed) {
   return normalized;
 }
 
+function createValidationError(message, details = {}) {
+  const error = new Error(message);
+  error.statusCode = 400;
+  error.details = details;
+  return error;
+}
+
+function hasResultShape(result) {
+  if (!result || typeof result !== "object") {
+    return false;
+  }
+
+  return ["score", "total", "percentage"].every((key) =>
+    Number.isFinite(Number(result[key]))
+  );
+}
+
 function validatePayload(section, payload) {
   if (!section) {
-    throw new Error("Section is required.");
+    throw createValidationError("Section is required.", {
+      field: "section",
+    });
   }
 
-  if (section === "writing" && !String(payload.answer || "").trim()) {
-    throw new Error("Answer is required.");
-  }
+  switch (section) {
+    case "writing":
+      if (!String(payload.answer || "").trim()) {
+        throw createValidationError("Answer is required for writing.", {
+          section,
+          field: "answer",
+        });
+      }
+      return;
 
-  if (section === "speaking" && !String(payload.transcript || "").trim()) {
-    throw new Error("Transcript is required.");
-  }
+    case "speaking":
+      return;
 
-  if (LOCAL_SECTIONS.has(section)) {
-    if (!payload.result) {
-      throw new Error("Local result data is required.");
+    case "listening":
+    case "reading":
+    case "grammar":
+    case "vocabulary":
+      if (!hasResultShape(payload.result)) {
+        throw createValidationError(`Result is required for ${section}.`, {
+          section,
+          field: "result",
+          expected: {
+            score: "number",
+            total: "number",
+            percentage: "number",
+          },
+        });
+      }
+      return;
+
+    case "homework": {
+      if (!payload.homeworkType) {
+        throw createValidationError("Homework type is required.", {
+          section,
+          field: "homeworkType",
+        });
+      }
+
+      const hasTextAnswer = Boolean(
+        String(
+          payload.answer || payload.transcript || payload.note || ""
+        ).trim()
+      );
+      const isFileHomework = payload.homeworkType === "file_homework";
+
+      if (
+        !hasTextAnswer &&
+        !isFileHomework &&
+        !hasResultShape(payload.result)
+      ) {
+        throw createValidationError("Homework answer is required.", {
+          section,
+          field: "answer",
+          homeworkType: payload.homeworkType,
+        });
+      }
+      return;
     }
-  }
 
-  if (section === "homework") {
-    if (!payload.homeworkType) {
-      throw new Error("Homework type is required.");
-    }
-
-    const hasTextAnswer = Boolean(
-      String(payload.answer || payload.transcript || payload.note || "").trim()
-    );
-    const isFileHomework = payload.homeworkType === "file_homework";
-
-    if (!hasTextAnswer && !isFileHomework && !payload.result) {
-      throw new Error("Homework answer is required.");
-    }
+    default:
+      throw createValidationError("Unsupported section.", {
+        section,
+      });
   }
 }
 
@@ -449,12 +531,12 @@ export default async function handler(req, res) {
     return res.status(200).json(result);
   } catch (error) {
     const message = error?.message || "Failed to generate AI feedback.";
-    const statusCode =
-      message.includes("required") || message.includes("Unsupported")
-        ? 400
-        : 500;
+    const statusCode = error?.statusCode || 500;
 
     console.error("AI feedback request failed:", message);
-    return res.status(statusCode).json({ error: message });
+    return res.status(statusCode).json({
+      error: message,
+      details: error?.details || null,
+    });
   }
 }

@@ -10,7 +10,7 @@ import { contentAssets } from "../../assets/content/assetRegistry";
 import { getListeningFeedback } from "../../services/ai/listeningFeedback";
 import { getReadingFeedback } from "../../services/ai/readingFeedback";
 import { getSpeakingFeedback } from "../../services/ai/speakingFeedback";
-import { getWritingFeedback } from "../../services/ai/writingFeedback";
+import { getWritingFeedback } from "../../services/ai/aiClient";
 
 function scoreAnswers(questions, answers) {
   const correctCount = questions.reduce((total, question, index) => {
@@ -33,6 +33,8 @@ function FinalPage() {
   const [writingFeedback, setWritingFeedback] = useState("");
   const [listeningScore, setListeningScore] = useState("");
   const [readingScore, setReadingScore] = useState("");
+  const [writingLoading, setWritingLoading] = useState(false);
+  const [writingError, setWritingError] = useState("");
 
   const listeningAudio = contentAssets.audio[finalData.listening.audioKey];
 
@@ -48,8 +50,26 @@ function FinalPage() {
     setReadingFeedback(getReadingFeedback(result));
   };
 
-  const handleWritingReview = () => {
-    setWritingFeedback(getWritingFeedback({ text: writingText }));
+  const handleWritingReview = async () => {
+    const trimmedText = writingText.trim();
+
+    if (!trimmedText) {
+      setWritingError("Iltimos, avval writing javobini kiriting.");
+      setWritingFeedback("");
+      return;
+    }
+
+    setWritingLoading(true);
+    setWritingError("");
+
+    try {
+      const feedback = await getWritingFeedback(trimmedText);
+      setWritingFeedback(feedback);
+    } catch {
+      setWritingError("AI feedback olishda xatolik yuz berdi.");
+    } finally {
+      setWritingLoading(false);
+    }
   };
 
   return (
@@ -126,13 +146,29 @@ function FinalPage() {
           <p className="writing-prompt">{finalData.writing.prompt}</p>
           <textarea
             value={writingText}
-            onChange={(event) => setWritingText(event.target.value)}
+            onChange={(event) => {
+              setWritingText(event.target.value);
+              if (writingError) {
+                setWritingError("");
+              }
+            }}
             placeholder="Write your response here..."
             rows={8}
           />
-          <button className="primary-button" onClick={handleWritingReview}>
-            Get writing feedback
+          {writingError ? <p className="error-text">{writingError}</p> : null}
+          <button
+            className="primary-button"
+            onClick={handleWritingReview}
+            disabled={writingLoading}
+          >
+            {writingLoading ? "Checking with AI..." : "Get writing feedback"}
           </button>
+          {writingLoading ? (
+            <div className="inline-feedback">
+              <strong>AI feedback tayyorlanmoqda.</strong>
+              <p>Iltimos, biroz kuting.</p>
+            </div>
+          ) : null}
         </div>
       </TestCard>
       <FeedbackCard title="Writing AI Feedback" feedback={writingFeedback} />

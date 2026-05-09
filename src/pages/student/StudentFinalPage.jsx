@@ -11,7 +11,7 @@ import { useAuth } from "../../context/AuthContext";
 import { getListeningFeedback } from "../../services/ai/listeningFeedback";
 import { getReadingFeedback } from "../../services/ai/readingFeedback";
 import { getSpeakingFeedback } from "../../services/ai/speakingFeedback";
-import { getWritingFeedback } from "../../services/ai/writingFeedback";
+import { getWritingFeedback } from "../../services/ai/aiClient";
 import { saveResult } from "../../services/results/resultService";
 import { getTestByType } from "../../services/tests/testService";
 import { scoreMcqTest } from "../../utils/testHelpers";
@@ -59,6 +59,8 @@ function StudentFinalPage() {
   const [readingFeedback, setReadingFeedback] = useState("");
   const [writingFeedback, setWritingFeedback] = useState("");
   const [speakingFeedback, setSpeakingFeedback] = useState("");
+  const [writingLoading, setWritingLoading] = useState(false);
+  const [writingError, setWritingError] = useState("");
 
   const completionPercent = Math.round((completedSteps.length / steps.length) * 100);
 
@@ -107,20 +109,38 @@ function StudentFinalPage() {
     goToNextStep();
   };
 
-  const handleWritingReview = () => {
-    const wordCount = writingText.trim().split(/\s+/).filter(Boolean).length;
+  const handleWritingReview = async () => {
+    const trimmedText = writingText.trim();
+
+    if (!trimmedText) {
+      setWritingError("Iltimos, avval writing javobini kiriting.");
+      setWritingFeedback("");
+      return;
+    }
+
+    const wordCount = trimmedText.split(/\s+/).filter(Boolean).length;
     const percent = wordCount >= 80 ? 78 : 56;
     const score = Math.round((percent / 100) * writingTest.score);
-    const feedback = getWritingFeedback({ text: writingText });
 
-    setWritingFeedback(feedback);
-    markStepComplete("writing");
-    saveStudentResult(
-      writingTest,
-      { score, maxScore: writingTest.score, percent },
-      feedback
-    );
-    goToNextStep();
+    setWritingLoading(true);
+    setWritingError("");
+
+    try {
+      const feedback = await getWritingFeedback(trimmedText);
+
+      setWritingFeedback(feedback);
+      markStepComplete("writing");
+      saveStudentResult(
+        writingTest,
+        { score, maxScore: writingTest.score, percent },
+        feedback
+      );
+      goToNextStep();
+    } catch {
+      setWritingError("AI feedback olishda xatolik yuz berdi.");
+    } finally {
+      setWritingLoading(false);
+    }
   };
 
   const renderStepOverview = (step, index) => (
@@ -256,13 +276,29 @@ function StudentFinalPage() {
                   <p className="writing-prompt">{writingTest.prompt}</p>
                   <textarea
                     value={writingText}
-                    onChange={(event) => setWritingText(event.target.value)}
+                    onChange={(event) => {
+                      setWritingText(event.target.value);
+                      if (writingError) {
+                        setWritingError("");
+                      }
+                    }}
                     rows={8}
                     placeholder="Write your response here..."
                   />
-                  <button className="primary-button" onClick={handleWritingReview}>
-                    Evaluate and continue
+                  {writingError ? <p className="error-text">{writingError}</p> : null}
+                  <button
+                    className="primary-button"
+                    onClick={handleWritingReview}
+                    disabled={writingLoading}
+                  >
+                    {writingLoading ? "Checking with AI..." : "Evaluate and continue"}
                   </button>
+                  {writingLoading ? (
+                    <div className="inline-feedback">
+                      <strong>AI feedback tayyorlanmoqda.</strong>
+                      <p>Iltimos, biroz kuting.</p>
+                    </div>
+                  ) : null}
                 </div>
               </TestCard>
               <FeedbackCard title="Writing AI feedback" feedback={writingFeedback} />

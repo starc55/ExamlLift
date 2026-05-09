@@ -2,8 +2,8 @@ import { Link } from "react-router-dom";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import TestCard from "../../components/cards/TestCard";
 import { useAuth } from "../../context/AuthContext";
-import { getAssignmentsForTeacher } from "../../services/content/assignmentService";
 import { getAllContent } from "../../services/content/contentService";
+import { getAllHomeworkSubmissions } from "../../services/homework/homeworkService";
 import { getAllResults } from "../../services/results/resultService";
 import { getAllTests } from "../../services/tests/testService";
 
@@ -12,12 +12,17 @@ function TeacherDashboardPage() {
   const contentCount = getAllContent().length;
   const tests = getAllTests();
   const results = getAllResults();
-  const assignments = getAssignmentsForTeacher(currentUser.id);
+  const assignments = getAllHomeworkSubmissions().filter(
+    (submission) => submission.teacherId === currentUser.id
+  );
   const averagePercent = results.length
-    ? Math.round(results.reduce((total, item) => total + item.percent, 0) / results.length)
+    ? Math.round(
+        results.reduce((total, item) => total + (item.percentage || item.percent), 0) /
+          results.length
+      )
     : 0;
   const pendingAssignments = assignments.filter(
-    (assignment) => assignment.status === "pending"
+    (assignment) => assignment.status === "submitted"
   );
 
   return (
@@ -27,7 +32,7 @@ function TeacherDashboardPage() {
           <p className="eyebrow">Teacher workspace</p>
           <h3>Content, tasks, tests, and results in one compact teacher panel</h3>
           <p>
-            Use the teacher panel to upload lessons, approve student assignments,
+            Use the teacher panel to upload lessons, create homework,
             manage tests, and review performance results.
           </p>
           <div className="hero-card__actions">
@@ -36,6 +41,9 @@ function TeacherDashboardPage() {
             </Link>
             <Link to="/teacher/results" className="secondary-button">
               Open results
+            </Link>
+            <Link to="/teacher/homework" className="secondary-button">
+              Homework
             </Link>
           </div>
         </div>
@@ -47,8 +55,8 @@ function TeacherDashboardPage() {
       </section>
 
       <section className="dashboard-grid dashboard-grid--compact">
-        <DashboardCard label="Pending tasks" value={pendingAssignments.length} helper="Waiting for teacher approval" tone="info" />
-        <DashboardCard label="Accepted tasks" value={assignments.length - pendingAssignments.length} helper="Already reviewed uploads" tone="success" />
+        <DashboardCard label="Review queue" value={pendingAssignments.length} helper="Submitted homework to inspect" tone="info" />
+        <DashboardCard label="Homework total" value={assignments.length} helper="All homework submissions" tone="success" />
         <DashboardCard label="Saved results" value={results.length} helper="Student submissions in storage" />
       </section>
 
@@ -72,11 +80,11 @@ function TeacherDashboardPage() {
           </Link>
         </TestCard>
         <TestCard
-          title="Assignment review"
-          description="Review and approve homework files submitted by students."
+          title="Homework review"
+          description="Inspect AI feedback, transcripts, and wrong answers from student homework."
           stats={`${pendingAssignments.length} pending`}
         >
-          <Link to="/teacher/upload-content" className="secondary-button card-link">
+          <Link to="/teacher/homework/submissions" className="secondary-button card-link">
             Review tasks
           </Link>
         </TestCard>
@@ -96,23 +104,23 @@ function TeacherDashboardPage() {
                 <div className="assignment-item__top">
                   <div>
                     <strong>{assignment.studentName}</strong>
-                    <p>{assignment.contentTitle}</p>
+                    <p>{assignment.title}</p>
                   </div>
-                  <span className="pill pill--soft">Pending</span>
+                  <span className="pill pill--soft">Submitted</span>
                 </div>
-                <p className="assignment-item__task">{assignment.taskTitle}</p>
-                <p>{assignment.note || "No note attached."}</p>
-                {assignment.aiFeedback ? (
+                <p className="assignment-item__task">{assignment.homeworkType}</p>
+                <p>{assignment.answer || assignment.transcript || "No text note attached."}</p>
+                {assignment.feedback ? (
                   <div className="assignment-ai-summary">
                     <strong>AI feedback</strong>
-                    <p>{assignment.aiFeedback.split("\n")[1] || assignment.aiFeedback}</p>
+                    <p>{assignment.feedback.split("\n")[1] || assignment.feedback}</p>
                   </div>
                 ) : null}
               </article>
             ))
           ) : (
             <div className="empty-state">
-              <h3>No pending tasks</h3>
+              <h3>No submissions yet</h3>
               <p>New student homework uploads will appear here automatically.</p>
             </div>
           )}

@@ -1,7 +1,7 @@
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import { useAuth } from "../../context/AuthContext";
-import { getAssignmentsForTeacher } from "../../services/content/assignmentService";
 import { getAllContent } from "../../services/content/contentService";
+import { getAllHomeworkSubmissions } from "../../services/homework/homeworkService";
 import { getAllTests } from "../../services/tests/testService";
 
 function TeacherProfilePage() {
@@ -10,9 +10,11 @@ function TeacherProfilePage() {
     (item) => item.createdBy === currentUser.id
   ).length;
   const testsCount = getAllTests().length;
-  const assignments = getAssignmentsForTeacher(currentUser.id);
+  const assignments = getAllHomeworkSubmissions().filter(
+    (submission) => submission.teacherId === currentUser.id
+  );
   const pendingAssignments = assignments.filter(
-    (assignment) => assignment.status === "pending"
+    (assignment) => assignment.status === "submitted"
   ).length;
 
   return (
@@ -29,7 +31,7 @@ function TeacherProfilePage() {
         <div className="dashboard-grid dashboard-grid--compact">
           <DashboardCard label="My lessons" value={contentCount} helper="Uploaded by this teacher" />
           <DashboardCard label="Managed tests" value={testsCount} helper="All active assessments" tone="info" />
-          <DashboardCard label="Pending tasks" value={pendingAssignments} helper="Need approval" tone="success" />
+          <DashboardCard label="Review queue" value={pendingAssignments} helper="Need review" tone="success" />
         </div>
       </section>
 
@@ -58,12 +60,12 @@ function TeacherProfilePage() {
             <strong>Role-based local auth</strong>
           </div>
           <div>
-            <span>Assignments in queue</span>
+            <span>Homework in queue</span>
             <strong>{pendingAssignments}</strong>
           </div>
           <div>
-            <span>Accepted submissions</span>
-            <strong>{assignments.length - pendingAssignments}</strong>
+            <span>Total submissions</span>
+            <strong>{assignments.length}</strong>
           </div>
         </div>
       </section>

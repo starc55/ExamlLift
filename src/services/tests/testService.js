@@ -5,6 +5,23 @@ import { contentAssets } from "../../assets/content/assetRegistry";
 import { readStorage, seedStorage, writeStorage } from "../shared/storage";
 
 const TESTS_KEY = "english-platform-tests";
+
+function inferGrammarTopic(prompt) {
+  if (prompt.includes("If I had")) {
+    return "Conditionals";
+  }
+
+  if (prompt.includes("has been")) {
+    return "Present perfect";
+  }
+
+  if (prompt.includes("was given")) {
+    return "Passive voice";
+  }
+
+  return "General grammar";
+}
+
 const vocabularyMatchingQuestions = vocabularyMatchingData.words.map((word) => ({
   id: `vocab-match-${word.id}`,
   prompt: word.term,
@@ -22,6 +39,8 @@ function buildMidtermVocabularyTest(overrides = {}) {
     instructions: vocabularyMatchingData.instruction,
     durationMinutes: 12,
     score: 30,
+    level: "Intermediate",
+    examType: "midterm",
     questions: vocabularyMatchingQuestions,
     matchingData: vocabularyMatchingData,
     ...overrides,
@@ -43,11 +62,14 @@ const seededTests = [
     instructions: "Complete the grammar check using one correct option per item.",
     durationMinutes: 12,
     score: 30,
+    level: "Intermediate",
+    examType: "midterm",
     questions: midtermData.grammar.map((question) => ({
       id: question.id,
       prompt: question.prompt,
       options: question.options,
       correctAnswer: question.answer,
+      grammarTopic: inferGrammarTopic(question.prompt),
     })),
   },
   {
@@ -58,8 +80,12 @@ const seededTests = [
     instructions: "Read the short passage and choose the best answer.",
     durationMinutes: 15,
     score: 20,
+    level: "Intermediate",
+    examType: "final",
     passageTitle: finalData.reading.title,
     passage: finalData.reading.passage,
+    passageSummary:
+      "Short daily study and quick error review improve memory, confidence, and reduce repeated mistakes.",
     questions: finalData.reading.questions.map((question) => ({
       id: question.id,
       prompt: question.prompt,
@@ -75,7 +101,11 @@ const seededTests = [
     instructions: "Listen to the audio once or twice and answer the questions.",
     durationMinutes: 14,
     score: 20,
+    level: "Intermediate",
+    examType: "final",
     audioUrl: contentAssets.audio[finalData.listening.audioKey],
+    audioTitle: "Study Schedule Conversation",
+    topic: "Improving English through regular lessons",
     questions: finalData.listening.questions.map((question) => ({
       id: question.id,
       prompt: question.prompt,
@@ -91,7 +121,10 @@ const seededTests = [
     instructions: "Write a structured response with an introduction, support, and conclusion.",
     durationMinutes: 25,
     score: 50,
+    level: "Intermediate",
+    examType: "final",
     prompt: finalData.writing.prompt,
+    taskTitle: "Opinion Essay",
     questions: [],
   },
   {
@@ -102,7 +135,10 @@ const seededTests = [
     instructions: "Record your answer clearly and speak in connected sentences.",
     durationMinutes: 6,
     score: 20,
+    level: "Intermediate",
+    examType: "midterm",
     prompt: midtermData.speaking.prompt,
+    taskTitle: "Midterm Speaking Task",
     questions: [],
   },
   {
@@ -113,7 +149,10 @@ const seededTests = [
     instructions: "Give a longer answer with details and a final opinion.",
     durationMinutes: 8,
     score: 30,
+    level: "Intermediate",
+    examType: "final",
     prompt: finalData.speaking.prompt,
+    taskTitle: "Final Speaking Reflection",
     questions: [],
   },
 ];

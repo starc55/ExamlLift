@@ -1,12 +1,9 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import UploadForm from "../../components/content/UploadForm";
 import ContentCard from "../../components/content/ContentCard";
-import FeedbackCard from "../../components/feedback/FeedbackCard";
 import { useAuth } from "../../context/AuthContext";
-import {
-  getAssignmentsForTeacher,
-  updateAssignmentStatus,
-} from "../../services/content/assignmentService";
+import { getAllHomeworkSubmissions } from "../../services/homework/homeworkService";
 import { createContent, getAllContent } from "../../services/content/contentService";
 import { fileToDataUrl } from "../../utils/fileHelpers";
 
@@ -34,8 +31,8 @@ function TeacherUploadContentPage() {
   const [statusTone, setStatusTone] = useState("success");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [contentItems, setContentItems] = useState(() => getAllContent().slice(0, 6));
-  const [assignments, setAssignments] = useState(() =>
-    getAssignmentsForTeacher(currentUser.id)
+  const submissions = getAllHomeworkSubmissions().filter(
+    (submission) => submission.teacherId === currentUser.id
   );
 
   const handleSubmit = async (event) => {
@@ -93,17 +90,6 @@ function TeacherUploadContentPage() {
     }));
   };
 
-  const handleAcceptAssignment = (assignmentId) => {
-    updateAssignmentStatus(assignmentId, "accepted");
-    setAssignments(getAssignmentsForTeacher(currentUser.id));
-    setStatusTone("success");
-    setStatusMessage("Student assignment accepted successfully.");
-  };
-
-  const pendingAssignments = assignments.filter(
-    (assignment) => assignment.status === "pending"
-  );
-
   return (
     <div className="page-stack">
       <UploadForm
@@ -140,56 +126,22 @@ function TeacherUploadContentPage() {
       <section className="card assignment-review">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Student submissions</p>
-            <h2>Review lesson tasks and accept them</h2>
+            <p className="eyebrow">Homework management</p>
+            <h2>Homework submissions are now handled in a dedicated panel</h2>
           </div>
-          <span className="pill">{pendingAssignments.length} pending</span>
+          <span className="pill">{submissions.length} submissions</span>
         </div>
-        <div className="assignment-list">
-          {assignments.length ? (
-            assignments.map((assignment) => (
-              <article key={assignment.id} className="assignment-item">
-                <div className="assignment-item__top">
-                  <div>
-                    <strong>{assignment.studentName}</strong>
-                    <p>{assignment.contentTitle}</p>
-                  </div>
-                  <span
-                    className={`status-dot ${
-                      assignment.status === "accepted" ? "status-dot--live" : ""
-                    }`}
-                  >
-                    {assignment.status}
-                  </span>
-                </div>
-                <p className="assignment-item__task">{assignment.taskTitle}</p>
-                <p>{assignment.note || "No note attached."}</p>
-                <div className="content-card__meta">
-                  <span>{new Date(assignment.submittedAt).toLocaleDateString()}</span>
-                  <span>{assignment.fileName || "No file attached"}</span>
-                </div>
-                <FeedbackCard
-                  title="AI homework feedback"
-                  feedback={assignment.aiFeedback}
-                />
-                {assignment.status === "pending" ? (
-                  <button
-                    className="primary-button card-link"
-                    onClick={() => handleAcceptAssignment(assignment.id)}
-                  >
-                    Accept task
-                  </button>
-                ) : (
-                  <p className="success-text">Accepted by teacher</p>
-                )}
-              </article>
-            ))
-          ) : (
-            <div className="empty-state">
-              <h3>No submissions yet</h3>
-              <p>Student task uploads will appear here for approval.</p>
-            </div>
-          )}
+        <p>
+          Content upload bu yerda qoladi, lekin AI-enabled homework creation va
+          submission review endi alohida homework sahifalarida ishlaydi.
+        </p>
+        <div className="card-actions">
+          <Link to="/teacher/homework" className="primary-button card-link">
+            Open homework manager
+          </Link>
+          <Link to="/teacher/homework/submissions" className="secondary-button card-link">
+            Review submissions
+          </Link>
         </div>
       </section>
     </div>

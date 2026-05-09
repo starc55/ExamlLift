@@ -1,20 +1,26 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import AudioPlayer from "../../components/audio/AudioPlayer";
+import AIStatusLoader from "../../components/feedback/AIStatusLoader";
+import CriteriaBreakdown from "../../components/feedback/CriteriaBreakdown";
+import ErrorAlert from "../../components/feedback/ErrorAlert";
 import FeedbackCard from "../../components/feedback/FeedbackCard";
+import ScoreSummary from "../../components/feedback/ScoreSummary";
+import WrongAnswersList from "../../components/feedback/WrongAnswersList";
 import ProgressBar from "../../components/ProgressBar";
 import TestCard from "../../components/cards/TestCard";
 import Timer from "../../components/Timer";
 import QuestionCard from "../../components/tests/QuestionCard";
 import SpeakingRecorder from "../../components/tests/SpeakingRecorder";
 import { useAuth } from "../../context/AuthContext";
-import { getListeningFeedback } from "../../services/ai/listeningFeedback";
-import { getReadingFeedback } from "../../services/ai/readingFeedback";
-import { getSpeakingFeedback } from "../../services/ai/speakingFeedback";
-import { getWritingFeedback } from "../../services/ai/aiClient";
+import {
+  getSpeakingFeedback,
+  getTestFeedback,
+  getWritingFeedback,
+} from "../../services/ai/aiClient";
 import { saveResult } from "../../services/results/resultService";
 import { getTestByType } from "../../services/tests/testService";
-import { scoreMcqTest } from "../../utils/testHelpers";
+import { areAllQuestionsAnswered, scoreMcqTest } from "../../utils/testHelpers";
 
 function StudentFinalPage() {
   const { currentUser } = useAuth();
@@ -55,12 +61,21 @@ function StudentFinalPage() {
   const [listeningAnswers, setListeningAnswers] = useState({});
   const [readingAnswers, setReadingAnswers] = useState({});
   const [writingText, setWritingText] = useState("");
-  const [listeningFeedback, setListeningFeedback] = useState("");
-  const [readingFeedback, setReadingFeedback] = useState("");
-  const [writingFeedback, setWritingFeedback] = useState("");
-  const [speakingFeedback, setSpeakingFeedback] = useState("");
+  const [listeningResult, setListeningResult] = useState(null);
+  const [readingResult, setReadingResult] = useState(null);
+  const [listeningAssessment, setListeningAssessment] = useState(null);
+  const [readingAssessment, setReadingAssessment] = useState(null);
+  const [writingAssessment, setWritingAssessment] = useState(null);
+  const [speakingAssessment, setSpeakingAssessment] = useState(null);
+  const [listeningLoading, setListeningLoading] = useState(false);
+  const [readingLoading, setReadingLoading] = useState(false);
   const [writingLoading, setWritingLoading] = useState(false);
+  const [speakingLoading, setSpeakingLoading] = useState(false);
+  const [listeningError, setListeningError] = useState("");
+  const [readingError, setReadingError] = useState("");
   const [writingError, setWritingError] = useState("");
+  const [speakingError, setSpeakingError] = useState("");
+  const [writingWarning, setWritingWarning] = useState("");
 
   const completionPercent = Math.round((completedSteps.length / steps.length) * 100);
 
@@ -72,9 +87,16 @@ function StudentFinalPage() {
       testTitle: test.title,
       type: test.type,
       section: test.section,
+      examType: test.examType,
       score: result.score,
-      maxScore: result.maxScore,
-      percent: result.percent,
+      total: result.total ?? result.maxScore ?? 0,
+      percentage: result.percentage ?? result.percent ?? 0,
+      band: result.band ?? null,
+      criteria: result.criteria || {},
+      answers: result.answers || null,
+      wrongAnswers: result.wrongAnswers || [],
+      transcript: result.transcript || "",
+      answer: result.answer || "",
       feedback,
     });
   };
@@ -90,23 +112,95 @@ function StudentFinalPage() {
   };
 
   const handleListeningSubmit = () => {
-    const result = scoreMcqTest(listeningTest.questions, listeningAnswers, listeningTest.score);
-    const feedback = getListeningFeedback({ percent: result.percent });
+    if (!areAllQuestionsAnswered(listeningTest.questions, listeningAnswers)) {
+      setListeningError("Barcha listening savollariga javob bering.");
+      return;
+    }
 
-    setListeningFeedback(feedback);
-    markStepComplete("listening");
-    saveStudentResult(listeningTest, result, feedback);
-    goToNextStep();
+    const result = scoreMcqTest(listeningTest.questions, listeningAnswers, listeningTest.score);
+    setListeningResult(result);
+    setListeningLoading(true);
+    setListeningError("");
+
+    getTestFeedback({
+      section: "listening",
+      result: {
+        score: result.correctCount,
+        total: result.totalQuestions,
+        percentage: result.percentage,
+      },
+      questionData: {
+        audioTitle: listeningTest.audioTitle,
+        topic: listeningTest.topic,
+        wrongAnswers: result.wrongAnswers,
+      },
+    })
+      .then((assessment) => {
+        setListeningAssessment(assessment);
+        markStepComplete("listening");
+        saveStudentResult(
+          listeningTest,
+          {
+            score: result.score,
+            total: result.maxScore,
+            percentage: result.percentage,
+            band: assessment.band,
+            criteria: assessment.criteria,
+            answers: listeningAnswers,
+            wrongAnswers: result.wrongAnswers,
+          },
+          assessment.feedback
+        );
+        goToNextStep();
+      })
+      .catch((error) => setListeningError(error.message))
+      .finally(() => setListeningLoading(false));
   };
 
   const handleReadingSubmit = () => {
-    const result = scoreMcqTest(readingTest.questions, readingAnswers, readingTest.score);
-    const feedback = getReadingFeedback({ percent: result.percent });
+    if (!areAllQuestionsAnswered(readingTest.questions, readingAnswers)) {
+      setReadingError("Barcha reading savollariga javob bering.");
+      return;
+    }
 
-    setReadingFeedback(feedback);
-    markStepComplete("reading");
-    saveStudentResult(readingTest, result, feedback);
-    goToNextStep();
+    const result = scoreMcqTest(readingTest.questions, readingAnswers, readingTest.score);
+    setReadingResult(result);
+    setReadingLoading(true);
+    setReadingError("");
+
+    getTestFeedback({
+      section: "reading",
+      result: {
+        score: result.correctCount,
+        total: result.totalQuestions,
+        percentage: result.percentage,
+      },
+      questionData: {
+        passageTitle: readingTest.passageTitle,
+        passageSummary: readingTest.passageSummary,
+        wrongAnswers: result.wrongAnswers,
+      },
+    })
+      .then((assessment) => {
+        setReadingAssessment(assessment);
+        markStepComplete("reading");
+        saveStudentResult(
+          readingTest,
+          {
+            score: result.score,
+            total: result.maxScore,
+            percentage: result.percentage,
+            band: assessment.band,
+            criteria: assessment.criteria,
+            answers: readingAnswers,
+            wrongAnswers: result.wrongAnswers,
+          },
+          assessment.feedback
+        );
+        goToNextStep();
+      })
+      .catch((error) => setReadingError(error.message))
+      .finally(() => setReadingLoading(false));
   };
 
   const handleWritingReview = async () => {
@@ -114,30 +208,48 @@ function StudentFinalPage() {
 
     if (!trimmedText) {
       setWritingError("Iltimos, avval writing javobini kiriting.");
-      setWritingFeedback("");
+      setWritingAssessment(null);
       return;
     }
 
     const wordCount = trimmedText.split(/\s+/).filter(Boolean).length;
-    const percent = wordCount >= 80 ? 78 : 56;
-    const score = Math.round((percent / 100) * writingTest.score);
+    setWritingWarning(
+      wordCount < 50
+        ? "Javob juda qisqa. Kuchli feedback uchun kamida 50 ta so'z yozish tavsiya etiladi."
+        : ""
+    );
 
     setWritingLoading(true);
     setWritingError("");
 
     try {
-      const feedback = await getWritingFeedback(trimmedText);
+      const assessment = await getWritingFeedback({
+        taskTitle: writingTest.taskTitle || writingTest.title,
+        taskPrompt: writingTest.prompt,
+        answer: trimmedText,
+        level: writingTest.level,
+        examType: writingTest.examType,
+      });
+      const percentage = assessment.score;
+      const score = Math.round((percentage / 100) * writingTest.score);
 
-      setWritingFeedback(feedback);
+      setWritingAssessment(assessment);
       markStepComplete("writing");
       saveStudentResult(
         writingTest,
-        { score, maxScore: writingTest.score, percent },
-        feedback
+        {
+          score,
+          total: writingTest.score,
+          percentage,
+          band: assessment.band,
+          criteria: assessment.criteria,
+          answer: trimmedText,
+        },
+        assessment.feedback
       );
       goToNextStep();
-    } catch {
-      setWritingError("AI feedback olishda xatolik yuz berdi.");
+    } catch (error) {
+      setWritingError(error.message);
     } finally {
       setWritingLoading(false);
     }
@@ -212,12 +324,15 @@ function StudentFinalPage() {
                       question={{ prompt: question.prompt, options: question.options }}
                       namePrefix="listening"
                       selectedValue={listeningAnswers[question.id]}
-                      onChange={(value) =>
+                      onChange={(value) => {
                         setListeningAnswers((current) => ({
                           ...current,
                           [question.id]: value,
-                        }))
-                      }
+                        }));
+                        if (listeningError) {
+                          setListeningError("");
+                        }
+                      }}
                     />
                   ))}
                 </div>
@@ -225,7 +340,20 @@ function StudentFinalPage() {
                   Submit and continue
                 </button>
               </TestCard>
-              <FeedbackCard title="Listening AI feedback" feedback={listeningFeedback} />
+              {listeningLoading ? <AIStatusLoader message="Listening AI feedback tayyorlanmoqda." /> : null}
+              <ErrorAlert message={listeningError} />
+              {listeningResult ? (
+                <ScoreSummary
+                  title="Listening summary"
+                  score={listeningResult.score}
+                  total={listeningResult.maxScore}
+                  percentage={listeningResult.percentage}
+                  band={listeningAssessment?.band}
+                />
+              ) : null}
+              <CriteriaBreakdown criteria={listeningAssessment?.criteria} />
+              {listeningResult ? <WrongAnswersList items={listeningResult.wrongAnswers} /> : null}
+              <FeedbackCard title="Listening AI feedback" feedback={listeningAssessment?.feedback} />
             </>
           ) : null}
 
@@ -248,12 +376,15 @@ function StudentFinalPage() {
                       question={{ prompt: question.prompt, options: question.options }}
                       namePrefix="reading"
                       selectedValue={readingAnswers[question.id]}
-                      onChange={(value) =>
+                      onChange={(value) => {
                         setReadingAnswers((current) => ({
                           ...current,
                           [question.id]: value,
-                        }))
-                      }
+                        }));
+                        if (readingError) {
+                          setReadingError("");
+                        }
+                      }}
                     />
                   ))}
                 </div>
@@ -261,7 +392,20 @@ function StudentFinalPage() {
                   Submit and continue
                 </button>
               </TestCard>
-              <FeedbackCard title="Reading AI feedback" feedback={readingFeedback} />
+              {readingLoading ? <AIStatusLoader message="Reading AI feedback tayyorlanmoqda." /> : null}
+              <ErrorAlert message={readingError} />
+              {readingResult ? (
+                <ScoreSummary
+                  title="Reading summary"
+                  score={readingResult.score}
+                  total={readingResult.maxScore}
+                  percentage={readingResult.percentage}
+                  band={readingAssessment?.band}
+                />
+              ) : null}
+              <CriteriaBreakdown criteria={readingAssessment?.criteria} />
+              {readingResult ? <WrongAnswersList items={readingResult.wrongAnswers} /> : null}
+              <FeedbackCard title="Reading AI feedback" feedback={readingAssessment?.feedback} />
             </>
           ) : null}
 
@@ -285,6 +429,7 @@ function StudentFinalPage() {
                     rows={8}
                     placeholder="Write your response here..."
                   />
+                  {writingWarning ? <p className="error-text">{writingWarning}</p> : null}
                   {writingError ? <p className="error-text">{writingError}</p> : null}
                   <button
                     className="primary-button"
@@ -301,7 +446,17 @@ function StudentFinalPage() {
                   ) : null}
                 </div>
               </TestCard>
-              <FeedbackCard title="Writing AI feedback" feedback={writingFeedback} />
+              {writingAssessment ? (
+                <ScoreSummary
+                  title="Writing summary"
+                  score={Math.round((writingAssessment.score / 100) * writingTest.score)}
+                  total={writingTest.score}
+                  percentage={writingAssessment.score}
+                  band={writingAssessment.band}
+                />
+              ) : null}
+              <CriteriaBreakdown criteria={writingAssessment?.criteria} />
+              <FeedbackCard title="Writing AI feedback" feedback={writingAssessment?.feedback} />
             </>
           ) : null}
 
@@ -315,27 +470,59 @@ function StudentFinalPage() {
                 <SpeakingRecorder
                   title="Final speaking task"
                   prompt={speakingTest.prompt}
-                  onEvaluate={async ({ durationSeconds }) => {
-                    const feedback = getSpeakingFeedback({
-                      durationSeconds,
-                      context: "final",
-                    });
-                    const percent = durationSeconds >= 30 ? 86 : 62;
-                    const score = Math.round((percent / 100) * speakingTest.score);
+                  onEvaluate={async ({ blob, durationSeconds }) => {
+                    setSpeakingLoading(true);
+                    setSpeakingError("");
 
-                    setSpeakingFeedback(feedback);
-                    markStepComplete("speaking");
-                    saveStudentResult(
-                      speakingTest,
-                      { score, maxScore: speakingTest.score, percent },
-                      feedback
-                    );
+                    try {
+                      const assessment = await getSpeakingFeedback(blob, {
+                        durationSeconds,
+                        taskTitle: speakingTest.taskTitle || speakingTest.title,
+                        taskPrompt: speakingTest.prompt,
+                        level: speakingTest.level,
+                        examType: speakingTest.examType,
+                      });
+                      const percentage = assessment.score;
+                      const score = Math.round((percentage / 100) * speakingTest.score);
 
-                    return feedback;
+                      setSpeakingAssessment(assessment);
+                      markStepComplete("speaking");
+                      saveStudentResult(
+                        speakingTest,
+                        {
+                          score,
+                          total: speakingTest.score,
+                          percentage,
+                          band: assessment.band,
+                          criteria: assessment.criteria,
+                          transcript: assessment.transcript,
+                        },
+                        assessment.feedback
+                      );
+
+                      return assessment;
+                    } catch (error) {
+                      setSpeakingError(error.message);
+                      throw error;
+                    } finally {
+                      setSpeakingLoading(false);
+                    }
                   }}
                 />
               </TestCard>
-              <FeedbackCard title="Speaking AI feedback" feedback={speakingFeedback} />
+              {speakingLoading ? <AIStatusLoader message="Speaking AI feedback tayyorlanmoqda." /> : null}
+              <ErrorAlert message={speakingError} />
+              {speakingAssessment ? (
+                <ScoreSummary
+                  title="Speaking summary"
+                  score={Math.round((speakingAssessment.score / 100) * speakingTest.score)}
+                  total={speakingTest.score}
+                  percentage={speakingAssessment.score}
+                  band={speakingAssessment.band}
+                />
+              ) : null}
+              <CriteriaBreakdown criteria={speakingAssessment?.criteria} />
+              <FeedbackCard title="Speaking AI feedback" feedback={speakingAssessment?.feedback} />
             </>
           ) : null}
 

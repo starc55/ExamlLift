@@ -1,17 +1,17 @@
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import { useAuth } from "../../context/AuthContext";
-import { getAssignmentsForStudent } from "../../services/content/assignmentService";
+import { getHomeworkSubmissionsByStudent } from "../../services/homework/homeworkService";
 import { getStudentResults } from "../../services/results/resultService";
 
 function StudentProfilePage() {
   const { currentUser } = useAuth();
   const results = getStudentResults(currentUser.id);
-  const assignments = getAssignmentsForStudent(currentUser.id);
-  const acceptedAssignments = assignments.filter(
-    (assignment) => assignment.status === "accepted"
-  ).length;
+  const assignments = getHomeworkSubmissionsByStudent(currentUser.id);
   const averageScore = results.length
-    ? Math.round(results.reduce((total, item) => total + item.percent, 0) / results.length)
+    ? Math.round(
+        results.reduce((total, item) => total + (item.percentage || item.percent), 0) /
+          results.length
+      )
     : 0;
 
   return (
@@ -27,8 +27,8 @@ function StudentProfilePage() {
         </div>
         <div className="dashboard-grid dashboard-grid--compact">
           <DashboardCard label="Average score" value={`${averageScore}%`} helper="Across all saved sections" tone="success" />
-          <DashboardCard label="Assignments" value={assignments.length} helper="Homework submissions" tone="info" />
-          <DashboardCard label="Accepted" value={acceptedAssignments} helper="Teacher approved tasks" />
+          <DashboardCard label="Homework" value={assignments.length} helper="Submitted homework tasks" tone="info" />
+          <DashboardCard label="Scored homework" value={assignments.filter((item) => item.feedback).length} helper="With saved feedback" />
         </div>
       </section>
 
@@ -61,8 +61,8 @@ function StudentProfilePage() {
             <strong>{results.length}</strong>
           </div>
           <div>
-            <span>Homework approved</span>
-            <strong>{acceptedAssignments}</strong>
+            <span>Homework submitted</span>
+            <strong>{assignments.length}</strong>
           </div>
         </div>
       </section>

@@ -8,11 +8,15 @@ import StudentContentDetailPage from "../pages/student/StudentContentDetailPage"
 import StudentContentPage from "../pages/student/StudentContentPage";
 import StudentDashboardPage from "../pages/student/StudentDashboardPage";
 import StudentFinalPage from "../pages/student/StudentFinalPage";
+import StudentHomeworkDetailPage from "../pages/student/StudentHomeworkDetailPage";
+import StudentHomeworkPage from "../pages/student/StudentHomeworkPage";
 import StudentMidtermPage from "../pages/student/StudentMidtermPage";
 import StudentProfilePage from "../pages/student/StudentProfilePage";
 import StudentResultsPage from "../pages/student/StudentResultsPage";
 import TeacherAnalyticsPage from "../pages/teacher/TeacherAnalyticsPage";
 import TeacherDashboardPage from "../pages/teacher/TeacherDashboardPage";
+import TeacherHomeworkPage from "../pages/teacher/TeacherHomeworkPage";
+import TeacherHomeworkSubmissionsPage from "../pages/teacher/TeacherHomeworkSubmissionsPage";
 import TeacherManageTestsPage from "../pages/teacher/TeacherManageTestsPage";
 import TeacherProfilePage from "../pages/teacher/TeacherProfilePage";
 import TeacherResultsPage from "../pages/teacher/TeacherResultsPage";
@@ -44,6 +48,8 @@ function AppRouter() {
               <Route path="dashboard" element={<StudentDashboardPage />} />
               <Route path="content" element={<StudentContentPage />} />
               <Route path="content/:id" element={<StudentContentDetailPage />} />
+              <Route path="homework" element={<StudentHomeworkPage />} />
+              <Route path="homework/:id" element={<StudentHomeworkDetailPage />} />
               <Route path="midterm" element={<StudentMidtermPage />} />
               <Route path="final" element={<StudentFinalPage />} />
               <Route path="results" element={<StudentResultsPage />} />
@@ -54,6 +60,8 @@ function AppRouter() {
           <Route element={<RoleRoute allowedRoles={[ROLES.TEACHER]} />}>
             <Route path="/teacher" element={<Layout />}>
               <Route path="dashboard" element={<TeacherDashboardPage />} />
+              <Route path="homework" element={<TeacherHomeworkPage />} />
+              <Route path="homework/submissions" element={<TeacherHomeworkSubmissionsPage />} />
               <Route path="upload-content" element={<TeacherUploadContentPage />} />
               <Route path="manage-tests" element={<TeacherManageTestsPage />} />
               <Route path="results" element={<TeacherResultsPage />} />

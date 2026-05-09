@@ -1,4 +1,8 @@
 import { useMemo, useState } from "react";
+import CriteriaBreakdown from "../../components/feedback/CriteriaBreakdown";
+import FeedbackCard from "../../components/feedback/FeedbackCard";
+import ScoreSummary from "../../components/feedback/ScoreSummary";
+import WrongAnswersList from "../../components/feedback/WrongAnswersList";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import ResultTable from "../../components/dashboard/ResultTable";
 import Modal from "../../components/layout/Modal";
@@ -6,21 +10,42 @@ import { getAllResults } from "../../services/results/resultService";
 
 function TeacherResultsPage() {
   const [sectionFilter, setSectionFilter] = useState("all");
+  const [studentFilter, setStudentFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("");
+  const [examTypeFilter, setExamTypeFilter] = useState("all");
   const [selectedResult, setSelectedResult] = useState(null);
   const results = useMemo(() => getAllResults(), []);
+  const studentOptions = [...new Set(results.map((result) => result.studentName).filter(Boolean))];
 
   const filteredResults = results.filter((result) => {
-    if (sectionFilter === "all") {
-      return true;
+    if (sectionFilter !== "all" && result.section !== sectionFilter) {
+      return false;
     }
 
-    return result.section === sectionFilter;
+    if (studentFilter !== "all" && result.studentName !== studentFilter) {
+      return false;
+    }
+
+    if (examTypeFilter !== "all" && (result.examType || result.section) !== examTypeFilter) {
+      return false;
+    }
+
+    if (dateFilter) {
+      const submittedDate = new Date(result.submittedAt).toISOString().slice(0, 10);
+      if (submittedDate !== dateFilter) {
+        return false;
+      }
+    }
+
+    return true;
   });
 
   const averagePercent = filteredResults.length
     ? Math.round(
-        filteredResults.reduce((total, item) => total + item.percent, 0) /
-          filteredResults.length
+        filteredResults.reduce(
+          (total, item) => total + (item.percentage || item.percent),
+          0
+        ) / filteredResults.length
       )
     : 0;
 
@@ -35,7 +60,7 @@ function TeacherResultsPage() {
         <DashboardCard
           label="Average score"
           value={`${averagePercent}%`}
-          helper="For the selected section"
+          helper="For the active filters"
           tone="success"
         />
         <DashboardCard
@@ -56,7 +81,23 @@ function TeacherResultsPage() {
             <option value="all">All sections</option>
             <option value="midterm">Midterm</option>
             <option value="final">Final</option>
+            <option value="homework">Homework</option>
           </select>
+          <select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)}>
+            <option value="all">All students</option>
+            {studentOptions.map((studentName) => (
+              <option key={studentName} value={studentName}>
+                {studentName}
+              </option>
+            ))}
+          </select>
+          <select value={examTypeFilter} onChange={(event) => setExamTypeFilter(event.target.value)}>
+            <option value="all">All exam types</option>
+            <option value="midterm">midterm</option>
+            <option value="final">final</option>
+            <option value="homework">homework</option>
+          </select>
+          <input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} />
         </div>
       </section>
 
@@ -67,15 +108,26 @@ function TeacherResultsPage() {
         title={selectedResult?.studentName || "Feedback"}
         onClose={() => setSelectedResult(null)}
       >
-        <div className="modal-card__content">
-          <p>
-            <strong>{selectedResult?.testTitle}</strong>
-          </p>
-          <p>
-            {selectedResult?.score}/{selectedResult?.maxScore} • {selectedResult?.percent}%
-          </p>
-          <pre>{selectedResult?.feedback}</pre>
-        </div>
+        {selectedResult ? (
+          <div className="modal-card__content">
+            <p>
+              <strong>{selectedResult.testTitle}</strong>
+            </p>
+            <ScoreSummary
+              title="Assessment summary"
+              score={selectedResult.score}
+              total={selectedResult.total || selectedResult.maxScore}
+              percentage={selectedResult.percentage || selectedResult.percent}
+              band={selectedResult.band}
+            />
+            <CriteriaBreakdown criteria={selectedResult.criteria} />
+            <WrongAnswersList
+              items={selectedResult.wrongAnswers}
+              emptyText="Bu attempt uchun wrong answers saqlanmagan."
+            />
+            <FeedbackCard title="Detailed AI feedback" feedback={selectedResult.feedback} />
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

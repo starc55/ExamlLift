@@ -20,6 +20,7 @@ function ResultTable({ results, emptyText = "No results found.", onViewFeedback 
               <th>Type</th>
               <th>Score</th>
               <th>Percent</th>
+              <th>Band</th>
               <th>Submitted</th>
               <th>Feedback</th>
             </tr>
@@ -32,9 +33,10 @@ function ResultTable({ results, emptyText = "No results found.", onViewFeedback 
                 <td data-label="Section">{result.section}</td>
                 <td data-label="Type">{result.type}</td>
                 <td data-label="Score">
-                  {result.score}/{result.maxScore}
+                  {result.score}/{result.total || result.maxScore}
                 </td>
-                <td data-label="Percent">{result.percent}%</td>
+                <td data-label="Percent">{result.percentage || result.percent}%</td>
+                <td data-label="Band">{result.band ?? "-"}</td>
                 <td data-label="Submitted">{new Date(result.submittedAt).toLocaleDateString()}</td>
                 <td data-label="Feedback">
                   <button

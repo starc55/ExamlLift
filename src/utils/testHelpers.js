@@ -1,9 +1,24 @@
 export function scoreMcqTest(questions, answers, maxScore) {
-  const correctCount = questions.reduce((total, question) => {
-    return total + (answers[question.id] === question.correctAnswer ? 1 : 0);
-  }, 0);
+  const wrongAnswers = questions.reduce((items, question) => {
+    const studentAnswer = answers[question.id] || "";
+
+    if (studentAnswer === question.correctAnswer) {
+      return items;
+    }
+
+    items.push({
+      id: question.id,
+      question: question.prompt,
+      studentAnswer,
+      correctAnswer: question.correctAnswer,
+      grammarTopic: question.grammarTopic || "",
+    });
+
+    return items;
+  }, []);
 
   const totalQuestions = questions.length || 1;
+  const correctCount = totalQuestions - wrongAnswers.length;
   const percent = Math.round((correctCount / totalQuestions) * 100);
   const score = Math.round((percent / 100) * (maxScore || totalQuestions));
 
@@ -11,8 +26,12 @@ export function scoreMcqTest(questions, answers, maxScore) {
     correctCount,
     totalQuestions,
     percent,
+    percentage: percent,
     score,
+    total: maxScore || totalQuestions,
     maxScore: maxScore || totalQuestions,
+    answeredCount: Object.values(answers).filter(Boolean).length,
+    wrongAnswers,
   };
 }
 
@@ -42,15 +61,32 @@ export function scoreVocabularyMatchingTest(words, definitions, answers, maxScor
   const correctCount = totalQuestions - incorrectItems.length;
   const percent = Math.round((correctCount / totalQuestions) * 100);
   const score = Math.round((percent / 100) * (maxScore || totalQuestions));
+  const wrongAnswers = incorrectItems.map((item) => ({
+    term: item.term,
+    studentAnswer: item.selectedKey || "",
+    correctAnswer: item.correctKey,
+    correctDefinition: item.correctText,
+  }));
 
   return {
     correctCount,
     totalQuestions,
     percent,
+    percentage: percent,
     score,
+    total: maxScore || totalQuestions,
     maxScore: maxScore || totalQuestions,
     incorrectItems,
+    wrongAnswers,
   };
+}
+
+export function areAllQuestionsAnswered(questions, answers) {
+  return questions.every((question) => Boolean(answers[question.id]));
+}
+
+export function areAllVocabularyAnswersSelected(words, answers) {
+  return words.every((word) => Boolean(answers[word.id]));
 }
 
 export function getAttemptStatus(percent) {

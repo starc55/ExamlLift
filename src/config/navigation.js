@@ -17,14 +17,24 @@ export const navigationByRole = {
   [ROLES.STUDENT]: [
     { to: "/student/dashboard", label: "Dashboard", icon: FaHouse },
     { to: "/student/content", label: "Content", icon: FaBookOpen },
-    { to: "/student/midterm", label: "Midterm Control", icon: FaClipboardCheck },
+    { to: "/student/homework", label: "Homework", icon: FaFileLines },
+    {
+      to: "/student/midterm",
+      label: "Midterm Control",
+      icon: FaClipboardCheck,
+    },
     { to: "/student/final", label: "Final Control", icon: FaGraduationCap },
     { to: "/student/results", label: "Results", icon: FaChartLine },
     { to: "/student/profile", label: "Profile", icon: FaUser },
   ],
   [ROLES.TEACHER]: [
     { to: "/teacher/dashboard", label: "Dashboard", icon: FaHouse },
-    { to: "/teacher/upload-content", label: "Upload Content", icon: FaFileArrowUp },
+    { to: "/teacher/homework", label: "Homework", icon: FaFileLines },
+    {
+      to: "/teacher/upload-content",
+      label: "Upload Content",
+      icon: FaFileArrowUp,
+    },
     { to: "/teacher/manage-tests", label: "Manage Tests", icon: FaListCheck },
     { to: "/teacher/results", label: "Student Results", icon: FaChartColumn },
     { to: "/teacher/analytics", label: "Analytics", icon: FaGaugeHigh },
@@ -35,11 +45,14 @@ export const navigationByRole = {
 const routeTitles = {
   "/student/dashboard": "Student Dashboard",
   "/student/content": "Learning Content",
+  "/student/homework": "Homework Center",
   "/student/midterm": "Midterm Control",
   "/student/final": "Final Control",
   "/student/results": "Result Center",
   "/student/profile": "Student Profile",
   "/teacher/dashboard": "Teacher Dashboard",
+  "/teacher/homework": "Homework Management",
+  "/teacher/homework/submissions": "Homework Submissions",
   "/teacher/upload-content": "Upload Content",
   "/teacher/manage-tests": "Manage Tests",
   "/teacher/results": "Student Results",
@@ -52,6 +65,10 @@ const routeTitles = {
 export function resolvePageTitle(pathname) {
   if (pathname.startsWith("/student/content/")) {
     return "Content Detail";
+  }
+
+  if (pathname.startsWith("/student/homework/")) {
+    return "Homework Detail";
   }
 
   return routeTitles[pathname] || "English Learning Platform";

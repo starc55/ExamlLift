@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import AIStatusLoader from "../../components/feedback/AIStatusLoader";
+import CriteriaBreakdown from "../../components/feedback/CriteriaBreakdown";
+import ErrorAlert from "../../components/feedback/ErrorAlert";
 import FeedbackCard from "../../components/feedback/FeedbackCard";
+import ScoreSummary from "../../components/feedback/ScoreSummary";
+import WrongAnswersList from "../../components/feedback/WrongAnswersList";
 import ProgressBar from "../../components/ProgressBar";
 import TestCard from "../../components/cards/TestCard";
 import Timer from "../../components/Timer";
@@ -9,12 +14,14 @@ import SpeakingRecorder from "../../components/tests/SpeakingRecorder";
 import VocabularyMatching from "../../components/tests/VocabularyMatching";
 import { useAuth } from "../../context/AuthContext";
 import { vocabularyMatchingData } from "../../data/tests/midtermVocabularyMatching";
-import { getGrammarFeedback } from "../../services/ai/grammarFeedback";
-import { getSpeakingFeedback } from "../../services/ai/speakingFeedback";
-import { getVocabularyFeedback } from "../../services/ai/vocabularyFeedback";
+import {
+  getSpeakingFeedback,
+  getTestFeedback,
+} from "../../services/ai/aiClient";
 import { saveResult } from "../../services/results/resultService";
 import { getTestByType } from "../../services/tests/testService";
 import {
+  areAllQuestionsAnswered,
   scoreMcqTest,
   scoreVocabularyMatchingTest,
 } from "../../utils/testHelpers";
@@ -55,9 +62,16 @@ function StudentMidtermPage() {
   const [vocabularyAnswers, setVocabularyAnswers] = useState({});
   const [grammarAnswers, setGrammarAnswers] = useState({});
   const [vocabularyResult, setVocabularyResult] = useState(null);
-  const [vocabularyFeedback, setVocabularyFeedback] = useState("");
-  const [grammarFeedback, setGrammarFeedback] = useState("");
-  const [speakingFeedback, setSpeakingFeedback] = useState("");
+  const [vocabularyAssessment, setVocabularyAssessment] = useState(null);
+  const [grammarResult, setGrammarResult] = useState(null);
+  const [grammarAssessment, setGrammarAssessment] = useState(null);
+  const [speakingAssessment, setSpeakingAssessment] = useState(null);
+  const [vocabularyLoading, setVocabularyLoading] = useState(false);
+  const [grammarLoading, setGrammarLoading] = useState(false);
+  const [speakingLoading, setSpeakingLoading] = useState(false);
+  const [vocabularyError, setVocabularyError] = useState("");
+  const [grammarError, setGrammarError] = useState("");
+  const [speakingError, setSpeakingError] = useState("");
   const vocabularyData = vocabularyTest.matchingData || vocabularyMatchingData;
 
   const completionPercent = Math.round((completedSteps.length / steps.length) * 100);
@@ -72,54 +86,105 @@ function StudentMidtermPage() {
     setActiveStep((current) => Math.min(current + 1, steps.length - 1));
   };
 
-  const handleVocabularySubmit = () => {
+  const handleVocabularySubmit = async () => {
     const result = scoreVocabularyMatchingTest(
       vocabularyData.words,
       vocabularyData.definitions,
       vocabularyAnswers,
       vocabularyTest.score
     );
-    const feedback = getVocabularyFeedback({
-      percent: result.percent,
-      incorrectItems: result.incorrectItems,
-    });
-
+    setVocabularyLoading(true);
+    setVocabularyError("");
     setVocabularyResult(result);
-    setVocabularyFeedback(feedback);
-    markStepComplete("vocabulary");
-    saveResult({
-      studentId: currentUser.id,
-      studentName: currentUser.fullname,
-      testId: vocabularyTest.id,
-      testTitle: vocabularyTest.title,
-      type: vocabularyTest.type,
-      section: vocabularyTest.section,
-      score: result.score,
-      maxScore: result.maxScore,
-      percent: result.percent,
-      feedback,
-    });
+
+    try {
+      const assessment = await getTestFeedback({
+        section: "vocabulary",
+        result: {
+          score: result.correctCount,
+          total: result.totalQuestions,
+          percentage: result.percentage,
+        },
+        questionData: {
+          wrongAnswers: result.wrongAnswers,
+        },
+      });
+
+      setVocabularyAssessment(assessment);
+      markStepComplete("vocabulary");
+      saveResult({
+        studentId: currentUser.id,
+        studentName: currentUser.fullname,
+        testId: vocabularyTest.id,
+        testTitle: vocabularyTest.title,
+        type: vocabularyTest.type,
+        section: vocabularyTest.section,
+        examType: vocabularyTest.examType,
+        score: result.score,
+        total: result.maxScore,
+        percentage: result.percentage,
+        band: assessment.band,
+        feedback: assessment.feedback,
+        criteria: assessment.criteria,
+        answers: vocabularyAnswers,
+        wrongAnswers: result.wrongAnswers,
+      });
+    } catch (error) {
+      setVocabularyError(error.message);
+    } finally {
+      setVocabularyLoading(false);
+    }
   };
 
-  const handleGrammarSubmit = () => {
-    const result = scoreMcqTest(grammarTest.questions, grammarAnswers, grammarTest.score);
-    const feedback = getGrammarFeedback({ percent: result.percent });
+  const handleGrammarSubmit = async () => {
+    if (!areAllQuestionsAnswered(grammarTest.questions, grammarAnswers)) {
+      setGrammarError("Barcha grammar savollariga javob bering.");
+      return;
+    }
 
-    setGrammarFeedback(feedback);
-    markStepComplete("grammar");
-    saveResult({
-      studentId: currentUser.id,
-      studentName: currentUser.fullname,
-      testId: grammarTest.id,
-      testTitle: grammarTest.title,
-      type: grammarTest.type,
-      section: grammarTest.section,
-      score: result.score,
-      maxScore: result.maxScore,
-      percent: result.percent,
-      feedback,
-    });
-    goToNextStep();
+    const result = scoreMcqTest(grammarTest.questions, grammarAnswers, grammarTest.score);
+    setGrammarResult(result);
+    setGrammarLoading(true);
+    setGrammarError("");
+
+    try {
+      const assessment = await getTestFeedback({
+        section: "grammar",
+        result: {
+          score: result.correctCount,
+          total: result.totalQuestions,
+          percentage: result.percentage,
+        },
+        questionData: {
+          wrongAnswers: result.wrongAnswers,
+        },
+      });
+
+      setGrammarAssessment(assessment);
+      markStepComplete("grammar");
+      saveResult({
+        studentId: currentUser.id,
+        studentName: currentUser.fullname,
+        testId: grammarTest.id,
+        testTitle: grammarTest.title,
+        type: grammarTest.type,
+        section: grammarTest.section,
+        examType: grammarTest.examType,
+        score: result.score,
+        total: result.maxScore,
+        percentage: result.percentage,
+        band: assessment.band,
+        feedback: assessment.feedback,
+        criteria: assessment.criteria,
+        answers: grammarAnswers,
+        wrongAnswers: result.wrongAnswers,
+      });
+      goToNextStep();
+    } catch (error) {
+      setGrammarError(error.message);
+    } finally {
+      setGrammarLoading(false);
+    }
   };
 
   const renderStepOverview = (step, index) => (
@@ -193,10 +258,25 @@ function StudentMidtermPage() {
                   }
                   onSubmit={handleVocabularySubmit}
                   result={vocabularyResult}
-                  onContinue={vocabularyResult ? goToNextStep : null}
+                  onContinue={vocabularyAssessment ? goToNextStep : null}
                 />
               </TestCard>
-              <FeedbackCard title="Vocabulary AI feedback" feedback={vocabularyFeedback} />
+              {vocabularyLoading ? <AIStatusLoader message="Vocabulary AI feedback tayyorlanmoqda." /> : null}
+              <ErrorAlert message={vocabularyError} />
+              {vocabularyResult ? (
+                <ScoreSummary
+                  title="Vocabulary summary"
+                  score={vocabularyResult.score}
+                  total={vocabularyResult.maxScore}
+                  percentage={vocabularyResult.percentage}
+                  band={vocabularyAssessment?.band}
+                />
+              ) : null}
+              <CriteriaBreakdown criteria={vocabularyAssessment?.criteria} />
+              {vocabularyResult ? (
+                <WrongAnswersList items={vocabularyResult.wrongAnswers} />
+              ) : null}
+              <FeedbackCard title="Vocabulary AI feedback" feedback={vocabularyAssessment?.feedback} />
             </>
           ) : null}
 
@@ -215,12 +295,15 @@ function StudentMidtermPage() {
                       question={{ prompt: question.prompt, options: question.options }}
                       namePrefix="grammar"
                       selectedValue={grammarAnswers[question.id]}
-                      onChange={(value) =>
+                      onChange={(value) => {
                         setGrammarAnswers((current) => ({
                           ...current,
                           [question.id]: value,
-                        }))
-                      }
+                        }));
+                        if (grammarError) {
+                          setGrammarError("");
+                        }
+                      }}
                     />
                   ))}
                 </div>
@@ -228,7 +311,20 @@ function StudentMidtermPage() {
                   Submit and continue
                 </button>
               </TestCard>
-              <FeedbackCard title="Grammar AI feedback" feedback={grammarFeedback} />
+              {grammarLoading ? <AIStatusLoader message="Grammar AI feedback tayyorlanmoqda." /> : null}
+              <ErrorAlert message={grammarError} />
+              {grammarResult ? (
+                <ScoreSummary
+                  title="Grammar summary"
+                  score={grammarResult.score}
+                  total={grammarResult.maxScore}
+                  percentage={grammarResult.percentage}
+                  band={grammarAssessment?.band}
+                />
+              ) : null}
+              <CriteriaBreakdown criteria={grammarAssessment?.criteria} />
+              {grammarResult ? <WrongAnswersList items={grammarResult.wrongAnswers} /> : null}
+              <FeedbackCard title="Grammar AI feedback" feedback={grammarAssessment?.feedback} />
             </>
           ) : null}
 
@@ -242,34 +338,63 @@ function StudentMidtermPage() {
                 <SpeakingRecorder
                   title="Midterm speaking task"
                   prompt={speakingTest.prompt}
-                  onEvaluate={async ({ durationSeconds }) => {
-                    const feedback = getSpeakingFeedback({
-                      durationSeconds,
-                      context: "midterm",
-                    });
-                    const percent = durationSeconds >= 20 ? 82 : 58;
-                    const score = Math.round((percent / 100) * speakingTest.score);
+                  onEvaluate={async ({ blob, durationSeconds }) => {
+                    setSpeakingLoading(true);
+                    setSpeakingError("");
 
-                    setSpeakingFeedback(feedback);
-                    markStepComplete("speaking");
-                    saveResult({
-                      studentId: currentUser.id,
-                      studentName: currentUser.fullname,
-                      testId: speakingTest.id,
-                      testTitle: speakingTest.title,
-                      type: speakingTest.type,
-                      section: speakingTest.section,
-                      score,
-                      maxScore: speakingTest.score,
-                      percent,
-                      feedback,
-                    });
+                    try {
+                      const assessment = await getSpeakingFeedback(blob, {
+                        durationSeconds,
+                        taskTitle: speakingTest.taskTitle || speakingTest.title,
+                        taskPrompt: speakingTest.prompt,
+                        level: speakingTest.level,
+                        examType: speakingTest.examType,
+                      });
+                      const percentage = assessment.score;
+                      const score = Math.round((percentage / 100) * speakingTest.score);
 
-                    return feedback;
+                      setSpeakingAssessment(assessment);
+                      markStepComplete("speaking");
+                      saveResult({
+                        studentId: currentUser.id,
+                        studentName: currentUser.fullname,
+                        testId: speakingTest.id,
+                        testTitle: speakingTest.title,
+                        type: speakingTest.type,
+                        section: speakingTest.section,
+                        examType: speakingTest.examType,
+                        score,
+                        total: speakingTest.score,
+                        percentage,
+                        band: assessment.band,
+                        feedback: assessment.feedback,
+                        criteria: assessment.criteria,
+                        transcript: assessment.transcript,
+                      });
+
+                      return assessment;
+                    } catch (error) {
+                      setSpeakingError(error.message);
+                      throw error;
+                    } finally {
+                      setSpeakingLoading(false);
+                    }
                   }}
                 />
               </TestCard>
-              <FeedbackCard title="Speaking AI feedback" feedback={speakingFeedback} />
+              {speakingLoading ? <AIStatusLoader message="Speaking AI feedback tayyorlanmoqda." /> : null}
+              <ErrorAlert message={speakingError} />
+              {speakingAssessment ? (
+                <ScoreSummary
+                  title="Speaking summary"
+                  score={Math.round((speakingAssessment.score / 100) * speakingTest.score)}
+                  total={speakingTest.score}
+                  percentage={speakingAssessment.score}
+                  band={speakingAssessment.band}
+                />
+              ) : null}
+              <CriteriaBreakdown criteria={speakingAssessment?.criteria} />
+              <FeedbackCard title="Speaking AI feedback" feedback={speakingAssessment?.feedback} />
             </>
           ) : null}
 

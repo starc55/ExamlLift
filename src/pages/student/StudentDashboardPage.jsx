@@ -3,8 +3,8 @@ import DashboardCard from "../../components/dashboard/DashboardCard";
 import ProgressBar from "../../components/ProgressBar";
 import TestCard from "../../components/cards/TestCard";
 import { useAuth } from "../../context/AuthContext";
-import { getAssignmentsForStudent } from "../../services/content/assignmentService";
 import { getAllContent } from "../../services/content/contentService";
+import { getHomeworkSubmissionsByStudent } from "../../services/homework/homeworkService";
 import { getStudentResults } from "../../services/results/resultService";
 import { getAllTests } from "../../services/tests/testService";
 
@@ -13,18 +13,19 @@ function StudentDashboardPage() {
   const contentCount = getAllContent().length;
   const tests = getAllTests();
   const results = getStudentResults(currentUser.id);
-  const assignments = getAssignmentsForStudent(currentUser.id);
+  const assignments = getHomeworkSubmissionsByStudent(currentUser.id);
   const averageScore = results.length
     ? Math.round(
-        results.reduce((total, item) => total + item.percent, 0) /
+        results.reduce((total, item) => total + (item.percentage || item.percent), 0) /
           results.length
       )
     : 0;
-  const acceptedAssignments = assignments.filter(
-    (assignment) => assignment.status === "accepted"
-  ).length;
-  const approvalRate = assignments.length
-    ? Math.round((acceptedAssignments / assignments.length) * 100)
+  const submittedHomework = assignments.length;
+  const averageHomework = assignments.length
+    ? Math.round(
+        assignments.reduce((total, item) => total + (item.percentage || 0), 0) /
+          assignments.length
+      )
     : 0;
 
   return (
@@ -43,8 +44,11 @@ function StudentDashboardPage() {
             <Link to="/student/content" className="primary-button">
               Open content
             </Link>
-            <Link to="/student/results" className="secondary-button">
+          <Link to="/student/results" className="secondary-button">
               View results
+          </Link>
+            <Link to="/student/homework" className="secondary-button">
+              Homework center
             </Link>
           </div>
         </div>
@@ -55,9 +59,9 @@ function StudentDashboardPage() {
             helper="Topic and media lessons"
           />
           <DashboardCard
-            label="Assignments"
+            label="Homework"
             value={assignments.length}
-            helper="Sent to the teacher"
+            helper="Submitted tasks"
             tone="info"
           />
           <DashboardCard
@@ -71,9 +75,9 @@ function StudentDashboardPage() {
 
       <section className="dashboard-grid dashboard-grid--compact">
         <DashboardCard
-          label="Accepted tasks"
-          value={acceptedAssignments}
-          helper="Teacher-approved uploads"
+          label="Submitted homework"
+          value={submittedHomework}
+          helper="Saved homework attempts"
           tone="success"
         />
         <DashboardCard
@@ -121,12 +125,15 @@ function StudentDashboardPage() {
           </Link>
         </TestCard>
         <TestCard
-          title="Assignment status"
-          description="At the end of each lesson, you can send a file or note to the teacher."
-          stats={`${acceptedAssignments} accepted`}
+          title="Homework status"
+          description="Submit writing, speaking, objective, or file-based homework from one center."
+          stats={`${submittedHomework} submitted`}
         >
-          <ProgressBar label="Teacher approval rate" value={approvalRate} />
+          <ProgressBar label="Homework score average" value={averageHomework} />
           <Link to="/student/content" className="secondary-button card-link">
+            Open lessons
+          </Link>
+          <Link to="/student/homework" className="primary-button card-link">
             Send homework
           </Link>
         </TestCard>

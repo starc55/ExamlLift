@@ -3,13 +3,13 @@ import { useEffect, useRef, useState } from "react";
 function SpeakingRecorder({
   title,
   prompt,
-  feedbackLabel = "Speaking Feedback",
   onEvaluate,
 }) {
   const [isRecording, setIsRecording] = useState(false);
+  const [isEvaluating, setIsEvaluating] = useState(false);
   const [audioUrl, setAudioUrl] = useState("");
   const [error, setError] = useState("");
-  const [feedback, setFeedback] = useState("");
+  const [transcript, setTranscript] = useState("");
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
@@ -27,7 +27,7 @@ function SpeakingRecorder({
 
   const startRecording = async () => {
     setError("");
-    setFeedback("");
+    setTranscript("");
 
     if (!navigator.mediaDevices?.getUserMedia) {
       setError("This browser does not support the MediaRecorder API.");
@@ -51,15 +51,31 @@ function SpeakingRecorder({
 
       recorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        if (blob.size === 0) {
+          setError("Audio yozuvi bo'sh. Qaytadan urinib ko'ring.");
+          streamRef.current?.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+        }
+
         const nextAudioUrl = URL.createObjectURL(blob);
-        const durationSeconds = Math.max(
-          5,
-          Math.round((Date.now() - startedAtRef.current) / 1000)
-        );
+        const durationSeconds = Math.max(1, Math.round((Date.now() - startedAtRef.current) / 1000));
 
         setAudioUrl(nextAudioUrl);
         streamRef.current?.getTracks().forEach((track) => track.stop());
-        setFeedback(await onEvaluate({ blob, durationSeconds }));
+        setIsEvaluating(true);
+
+        try {
+          const result = await onEvaluate({ blob, durationSeconds });
+          setTranscript(result?.transcript || "");
+        } catch (evaluationError) {
+          setError(evaluationError.message || "Speaking baholashda xatolik yuz berdi.");
+        } finally {
+          setIsEvaluating(false);
+        }
       };
 
       recorder.start();
@@ -87,11 +103,11 @@ function SpeakingRecorder({
       </div>
       <div className="speaking-recorder__actions">
         {!isRecording ? (
-          <button className="primary-button" onClick={startRecording}>
+          <button className="primary-button" onClick={startRecording} disabled={isEvaluating}>
             Start recording
           </button>
         ) : (
-          <button className="danger-button" onClick={stopRecording}>
+          <button className="danger-button" onClick={stopRecording} disabled={isEvaluating}>
             Stop recording
           </button>
         )}
@@ -99,11 +115,17 @@ function SpeakingRecorder({
       {audioUrl ? (
         <audio controls src={audioUrl} className="audio-player__native" />
       ) : null}
-      {error ? <p className="error-text">{error}</p> : null}
-      {feedback ? (
+      {isEvaluating ? (
         <div className="inline-feedback">
-          <strong>{feedbackLabel}</strong>
-          <pre>{feedback}</pre>
+          <strong>Audio AI ga yuborildi.</strong>
+          <p>Transcript va feedback tayyorlanmoqda.</p>
+        </div>
+      ) : null}
+      {error ? <p className="error-text">{error}</p> : null}
+      {transcript ? (
+        <div className="inline-feedback">
+          <strong>Transcript</strong>
+          <pre>{transcript}</pre>
         </div>
       ) : null}
     </div>

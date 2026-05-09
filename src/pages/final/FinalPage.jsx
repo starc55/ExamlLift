@@ -20,7 +20,7 @@ function scoreAnswers(questions, answers) {
   return {
     score: correctCount,
     total: questions.length,
-    percent: Math.round((correctCount / questions.length) * 100)
+    percent: Math.round((correctCount / questions.length) * 100),
   };
 }
 
@@ -39,7 +39,10 @@ function FinalPage() {
   const listeningAudio = contentAssets.audio[finalData.listening.audioKey];
 
   const handleListeningSubmit = () => {
-    const result = scoreAnswers(finalData.listening.questions, listeningAnswers);
+    const result = scoreAnswers(
+      finalData.listening.questions,
+      listeningAnswers
+    );
     setListeningScore(`${result.score}/${result.total}`);
     setListeningFeedback(getListeningFeedback(result));
   };
@@ -63,8 +66,14 @@ function FinalPage() {
     setWritingError("");
 
     try {
-      const feedback = await getWritingFeedback(trimmedText);
-      setWritingFeedback(feedback);
+      const assessment = await getWritingFeedback({
+        taskTitle: "Writing Task",
+        taskPrompt: finalData.writing.prompt,
+        answer: trimmedText,
+        level: "Intermediate",
+        examType: "final",
+      });
+      setWritingFeedback(assessment.feedback);
     } catch {
       setWritingError("AI feedback olishda xatolik yuz berdi.");
     } finally {
@@ -77,7 +86,9 @@ function FinalPage() {
       <section className="section-heading section-heading--with-tools">
         <div>
           <p className="eyebrow">Final assessment</p>
-          <h2>Writing, speaking, listening and reading with mock AI evaluation</h2>
+          <h2>
+            Writing, speaking, listening and reading with mock AI evaluation
+          </h2>
         </div>
         <Timer initialMinutes={35} />
       </section>
@@ -85,7 +96,9 @@ function FinalPage() {
       <TestCard
         title="Listening"
         description="Play the audio and answer the questions."
-        stats={listeningScore || `${finalData.listening.questions.length} questions`}
+        stats={
+          listeningScore || `${finalData.listening.questions.length} questions`
+        }
       >
         <AudioPlayer src={listeningAudio} title="Listening audio" />
         <div className="question-list">
@@ -97,7 +110,10 @@ function FinalPage() {
               namePrefix="listening"
               selectedValue={listeningAnswers[index]}
               onChange={(value) =>
-                setListeningAnswers((current) => ({ ...current, [index]: value }))
+                setListeningAnswers((current) => ({
+                  ...current,
+                  [index]: value,
+                }))
               }
             />
           ))}
@@ -106,12 +122,17 @@ function FinalPage() {
           Submit listening
         </button>
       </TestCard>
-      <FeedbackCard title="Listening AI Feedback" feedback={listeningFeedback} />
+      <FeedbackCard
+        title="Listening AI Feedback"
+        feedback={listeningFeedback}
+      />
 
       <TestCard
         title="Reading"
         description="Read the passage and answer the questions."
-        stats={readingScore || `${finalData.reading.questions.length} questions`}
+        stats={
+          readingScore || `${finalData.reading.questions.length} questions`
+        }
       >
         <div className="reading-passage">
           <h4>{finalData.reading.title}</h4>

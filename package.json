@@ -12,6 +12,7 @@
     "preview": "node ./node_modules/vite/bin/vite.js preview"
   },
   "dependencies": {
+    "formidable": "^3.5.4",
     "framer-motion": "^11.18.2",
     "openai": "^6.37.0",
     "react": "^18.3.1",

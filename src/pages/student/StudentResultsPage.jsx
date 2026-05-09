@@ -1,4 +1,8 @@
 import { useMemo, useState } from "react";
+import CriteriaBreakdown from "../../components/feedback/CriteriaBreakdown";
+import FeedbackCard from "../../components/feedback/FeedbackCard";
+import ScoreSummary from "../../components/feedback/ScoreSummary";
+import WrongAnswersList from "../../components/feedback/WrongAnswersList";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import ResultTable from "../../components/dashboard/ResultTable";
 import Modal from "../../components/layout/Modal";
@@ -10,10 +14,13 @@ function StudentResultsPage() {
   const [selectedResult, setSelectedResult] = useState(null);
   const results = useMemo(() => getStudentResults(currentUser.id), [currentUser.id]);
   const averagePercent = results.length
-    ? Math.round(results.reduce((total, item) => total + item.percent, 0) / results.length)
+    ? Math.round(
+        results.reduce((total, item) => total + (item.percentage || item.percent), 0) /
+          results.length
+      )
     : 0;
   const highestScore = results.length
-    ? Math.max(...results.map((result) => result.percent))
+    ? Math.max(...results.map((result) => result.percentage || result.percent))
     : 0;
 
   return (
@@ -22,7 +29,7 @@ function StudentResultsPage() {
         <DashboardCard
           label="Attempts"
           value={results.length}
-          helper="Saved in the local demo database"
+          helper="Saved in local storage"
         />
         <DashboardCard
           label="Average"
@@ -56,15 +63,23 @@ function StudentResultsPage() {
         title={selectedResult?.testTitle || "Feedback"}
         onClose={() => setSelectedResult(null)}
       >
-        <div className="modal-card__content">
-          <p>
-            <strong>
-              {selectedResult?.score}/{selectedResult?.maxScore} points •{" "}
-              {selectedResult?.percent}%
-            </strong>
-          </p>
-          <pre>{selectedResult?.feedback}</pre>
-        </div>
+        {selectedResult ? (
+          <div className="modal-card__content">
+            <ScoreSummary
+              title="Assessment summary"
+              score={selectedResult.score}
+              total={selectedResult.total || selectedResult.maxScore}
+              percentage={selectedResult.percentage || selectedResult.percent}
+              band={selectedResult.band}
+            />
+            <CriteriaBreakdown criteria={selectedResult.criteria} />
+            <WrongAnswersList
+              items={selectedResult.wrongAnswers}
+              emptyText="Bu natijada noto'g'ri javoblar saqlanmagan."
+            />
+            <FeedbackCard title="Detailed AI feedback" feedback={selectedResult.feedback} />
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

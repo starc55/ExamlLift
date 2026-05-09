@@ -503,7 +503,7 @@ export async function generateAssessment({ client, section, payload }) {
     model: MODEL,
     input: promptBuilder(payload),
     text: {
-      verbosity: "low",
+      verbosity: "medium",
       format: {
         type: "json_schema",
         name: `${section}_assessment`,

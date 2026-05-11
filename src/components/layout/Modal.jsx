@@ -1,4 +1,4 @@
-function Modal({ isOpen, title, onClose, children }) {
+function Modal({ isOpen, title, onClose, children, className = "" }) {
   if (!isOpen) {
     return null;
   }
@@ -6,7 +6,7 @@ function Modal({ isOpen, title, onClose, children }) {
   return (
     <div className="modal-overlay" role="presentation" onClick={onClose}>
       <div
-        className="modal-card"
+        className={`modal-card ${className}`.trim()}
         role="dialog"
         aria-modal="true"
         onClick={(event) => event.stopPropagation()}

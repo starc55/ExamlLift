@@ -1,3 +1,8 @@
+import {
+  getSavedFeedbackLanguage,
+  normalizeFeedbackLanguage,
+} from "./feedbackLanguage";
+
 const AI_ERROR_MESSAGE = "AI feedback olishda xatolik yuz berdi.";
 
 async function parseJsonResponse(response) {
@@ -37,12 +42,21 @@ function buildJsonRequest(body) {
   };
 }
 
+function withFeedbackLanguage(payload = {}) {
+  return {
+    ...payload,
+    feedbackLanguage: normalizeFeedbackLanguage(
+      payload.feedbackLanguage || getSavedFeedbackLanguage()
+    ),
+  };
+}
+
 export async function getWritingFeedback(payload) {
   return requestJson(
     "/api/ai-feedback",
     buildJsonRequest({
       section: "writing",
-      ...payload,
+      ...withFeedbackLanguage(payload),
     })
   );
 }
@@ -53,12 +67,13 @@ export async function getSpeakingFeedback(audioBlob, metadata = {}) {
   }
 
   const formData = new FormData();
+  const normalizedMetadata = withFeedbackLanguage(metadata);
   formData.append(
     "audio",
     audioBlob,
-    metadata.fileName || "speaking-response.webm"
+    normalizedMetadata.fileName || "speaking-response.webm"
   );
-  formData.append("metadata", JSON.stringify(metadata));
+  formData.append("metadata", JSON.stringify(normalizedMetadata));
 
   return requestJson("/api/transcribe-speaking", {
     method: "POST",
@@ -71,7 +86,22 @@ export async function getTestFeedback(payload) {
     throw new Error("Section is required.");
   }
 
-  return requestJson("/api/ai-feedback", buildJsonRequest(payload));
+  return requestJson(
+    "/api/ai-feedback",
+    buildJsonRequest(withFeedbackLanguage(payload))
+  );
+}
+
+export async function getOverallExamFeedback(payload) {
+  return requestJson(
+    "/api/ai-feedback",
+    buildJsonRequest(
+      withFeedbackLanguage({
+        section: "overall_exam",
+        ...payload,
+      })
+    )
+  );
 }
 
 export async function getHomeworkFeedback(payload) {
@@ -83,7 +113,7 @@ export async function getHomeworkFeedback(payload) {
     "/api/ai-feedback",
     buildJsonRequest({
       section: "homework",
-      ...payload,
+      ...withFeedbackLanguage(payload),
     })
   );
 }

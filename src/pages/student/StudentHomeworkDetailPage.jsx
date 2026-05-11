@@ -4,6 +4,7 @@ import AIStatusLoader from "../../components/feedback/AIStatusLoader";
 import CriteriaBreakdown from "../../components/feedback/CriteriaBreakdown";
 import ErrorAlert from "../../components/feedback/ErrorAlert";
 import FeedbackCard from "../../components/feedback/FeedbackCard";
+import FeedbackLanguageSelector from "../../components/feedback/FeedbackLanguageSelector";
 import ScoreSummary from "../../components/feedback/ScoreSummary";
 import WrongAnswersList from "../../components/feedback/WrongAnswersList";
 import TestCard from "../../components/cards/TestCard";
@@ -12,6 +13,7 @@ import { useAuth } from "../../context/AuthContext";
 import {
   getHomeworkFeedback,
 } from "../../services/ai/aiClient";
+import { getSavedFeedbackLanguage } from "../../services/ai/feedbackLanguage";
 import {
   getHomeworkById,
   getLatestHomeworkSubmission,
@@ -19,6 +21,18 @@ import {
   scoreObjectiveHomework,
 } from "../../services/homework/homeworkService";
 import { fileToDataUrl } from "../../utils/fileHelpers";
+
+function buildFileHomeworkFeedback(feedbackLanguage) {
+  if (feedbackLanguage === "ru") {
+    return "Общая оценка:\nФайл homework принят. Этот тип задания требует проверки учителем, поэтому AI не выставляет детальную языковую оценку.\n\nУровень CEFR:\nНе определен\n\nСильные стороны:\n* Работа успешно отправлена.\n\nОшибки:\n* Автоматическая языковая проверка для файла не применялась.\n\nРекомендации:\n* Убедитесь, что файл соответствует инструкции.\n\nСледующий шаг:\nДождитесь проверки учителя в разделе submissions.";
+  }
+
+  if (feedbackLanguage === "en") {
+    return "Overall evaluation:\nThe file homework was submitted successfully. This task type needs teacher review, so AI does not provide a detailed language assessment.\n\nCEFR level:\nNot assessed\n\nStrengths:\n* The work was uploaded successfully.\n\nMistakes:\n* Automatic language scoring was not applied to this file.\n\nRecommendations:\n* Make sure the file follows the task instructions.\n\nNext step:\nWait for teacher review in the submissions section.";
+  }
+
+  return "Umumiy baho:\nFayl homework qabul qilindi. Bu turdagi topshiriq teacher review talab qiladi, shuning uchun AI chuqur til bahosi bermaydi.\n\nCEFR daraja:\nAniqlanmadi\n\nKuchli tomonlar:\n* Ish muvaffaqiyatli yuklandi.\n\nXatolar:\n* Fayl uchun avtomatik til baholash qo'llanilmadi.\n\nTavsiyalar:\n* Fayl topshiriq ko'rsatmasiga mosligini tekshiring.\n\nKeyingi qadam:\nTeacher review natijasini submissions bo'limida kuting.";
+}
 
 function StudentHomeworkDetailPage() {
   const { id } = useParams();
@@ -34,6 +48,7 @@ function StudentHomeworkDetailPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [feedbackLanguage, setFeedbackLanguage] = useState(getSavedFeedbackLanguage);
 
   if (!homework) {
     return (
@@ -63,6 +78,7 @@ function StudentHomeworkDetailPage() {
       studentName: currentUser.fullname,
       teacherId: homework.createdBy,
       teacherName: homework.createdByName,
+      feedbackLanguage,
       ...payload,
     });
 
@@ -87,6 +103,7 @@ function StudentHomeworkDetailPage() {
     try {
       const assessment = await getHomeworkFeedback({
         homeworkType: homework.type,
+        feedbackLanguage,
         taskTitle: homework.title,
         instructions: homework.instructions,
         answer: trimmedAnswer,
@@ -132,6 +149,7 @@ function StudentHomeworkDetailPage() {
     try {
       const assessment = await getHomeworkFeedback({
         homeworkType: homework.type,
+        feedbackLanguage,
         taskTitle: homework.title,
         instructions: homework.instructions,
         level: homework.level,
@@ -182,8 +200,7 @@ function StudentHomeworkDetailPage() {
         total: 0,
         percentage: 0,
         band: null,
-        feedback:
-          "Umumiy baho:\nFayl homework qabul qilindi. Hozircha bu turdagi topshiriq AI tomonidan chuqur tekshirilmaydi.\n\nXatolar:\n* Avtomatik til baholash bu homework turi uchun qo'llanilmadi.\n* Teacher review kutilmoqda.\n\nTavsiyalar:\n* Fayl nomini aniq saqlang va topshiriq maqsadini qisqa yozing.\n* Zarur bo'lsa, teacher uchun izoh ham qo'shing.\n\nKeyingi qadam:\nTeacher review natijasini homework submissions bo'limida tekshiring.",
+        feedback: buildFileHomeworkFeedback(feedbackLanguage),
         criteria: {},
         fileName,
         fileUrl,
@@ -208,6 +225,11 @@ function StudentHomeworkDetailPage() {
         description={homework.instructions}
         stats={`${homework.type} | ${homework.level} | Due ${homework.deadline || "-"}`}
       >
+        <FeedbackLanguageSelector
+          value={feedbackLanguage}
+          onChange={setFeedbackLanguage}
+        />
+
         {homework.type === "writing_homework" ? (
           <form className="assignment-form" onSubmit={handleWritingSubmit}>
             <textarea
@@ -261,6 +283,7 @@ function StudentHomeworkDetailPage() {
               try {
                 const assessment = await getHomeworkFeedback({
                   homeworkType: homework.type,
+                  feedbackLanguage,
                   audioBlob: blob,
                   durationSeconds,
                   taskTitle: homework.title,

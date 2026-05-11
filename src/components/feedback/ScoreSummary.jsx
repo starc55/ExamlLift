@@ -4,6 +4,7 @@ function ScoreSummary({
   total = 0,
   percentage = 0,
   band = null,
+  cefrLevel = null,
 }) {
   return (
     <section className="card score-summary">
@@ -25,8 +26,8 @@ function ScoreSummary({
           <span>Percentage</span>
         </div>
         <div className="score-summary__item">
-          <strong>{band ?? "-"}</strong>
-          <span>Band</span>
+          <strong>{cefrLevel || band || "-"}</strong>
+          <span>{cefrLevel ? "CEFR" : "Band"}</span>
         </div>
       </div>
     </section>

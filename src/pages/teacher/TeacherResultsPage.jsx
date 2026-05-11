@@ -1,11 +1,8 @@
 import { useMemo, useState } from "react";
-import CriteriaBreakdown from "../../components/feedback/CriteriaBreakdown";
-import FeedbackCard from "../../components/feedback/FeedbackCard";
-import ScoreSummary from "../../components/feedback/ScoreSummary";
-import WrongAnswersList from "../../components/feedback/WrongAnswersList";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import ResultTable from "../../components/dashboard/ResultTable";
 import Modal from "../../components/layout/Modal";
+import ResultDetails from "../../components/results/ResultDetails";
 import { getAllResults } from "../../services/results/resultService";
 
 function TeacherResultsPage() {
@@ -109,24 +106,7 @@ function TeacherResultsPage() {
         onClose={() => setSelectedResult(null)}
       >
         {selectedResult ? (
-          <div className="modal-card__content">
-            <p>
-              <strong>{selectedResult.testTitle}</strong>
-            </p>
-            <ScoreSummary
-              title="Assessment summary"
-              score={selectedResult.score}
-              total={selectedResult.total || selectedResult.maxScore}
-              percentage={selectedResult.percentage || selectedResult.percent}
-              band={selectedResult.band}
-            />
-            <CriteriaBreakdown criteria={selectedResult.criteria} />
-            <WrongAnswersList
-              items={selectedResult.wrongAnswers}
-              emptyText="Bu attempt uchun wrong answers saqlanmagan."
-            />
-            <FeedbackCard title="Detailed AI feedback" feedback={selectedResult.feedback} />
-          </div>
+          <ResultDetails result={selectedResult} />
         ) : null}
       </Modal>
     </div>

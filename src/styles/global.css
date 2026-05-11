@@ -1429,6 +1429,77 @@ pre {
 }
 
 /* ===== StudentResultsPage And TeacherResultsPage Table ===== */
+.language-selector {
+  display: grid;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.language-selector span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.language-selector select {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 252, 248, 0.95);
+  color: var(--text);
+}
+
+.result-card-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.result-card {
+  display: grid;
+  gap: 16px;
+}
+
+.result-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.result-card__metrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.result-card__metrics span {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(202, 162, 77, 0.2);
+  background: rgba(255, 252, 248, 0.92);
+  color: var(--primary-dark);
+  font-weight: 700;
+}
+
+.section-breakdown-card,
+.section-breakdown-list,
+.section-breakdown-item {
+  display: grid;
+  gap: 14px;
+}
+
+.section-breakdown-item {
+  padding: 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(202, 162, 77, 0.22);
+  background: linear-gradient(180deg, rgba(255, 252, 248, 0.92), rgba(248, 236, 227, 0.88));
+}
+
 .filter-row select {
   min-width: 180px;
   padding: 12px 14px;
@@ -1643,6 +1714,7 @@ pre {
   .dashboard-grid--features,
   .compact-card-grid,
   .assignment-list,
+  .result-card-grid,
   .exam-steps,
   .exam-steps--progress {
     grid-template-columns: 1fr;
@@ -1761,6 +1833,12 @@ pre {
   .file-field__trigger,
   .file-field__name {
     width: 100%;
+  }
+
+  .language-selector,
+  .result-card__metrics {
+    width: 100%;
+    grid-template-columns: 1fr;
   }
 }
 

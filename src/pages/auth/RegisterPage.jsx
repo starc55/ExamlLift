@@ -48,8 +48,8 @@ function RegisterPage() {
           </div>
         </div>
         <p className="auth-intro">
-          Register as a student or teacher. The structure is also ready for a future
-          admin role.
+          Register as a student or teacher. The structure is also ready for a
+          future admin role.
         </p>
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="form-grid">
@@ -59,7 +59,10 @@ function RegisterPage() {
                 type="text"
                 value={form.fullname}
                 onChange={(event) =>
-                  setForm((value) => ({ ...value, fullname: event.target.value }))
+                  setForm((value) => ({
+                    ...value,
+                    fullname: event.target.value,
+                  }))
                 }
                 placeholder="Alex Johnson"
                 required
@@ -85,7 +88,10 @@ function RegisterPage() {
                 type="password"
                 value={form.password}
                 onChange={(event) =>
-                  setForm((value) => ({ ...value, password: event.target.value }))
+                  setForm((value) => ({
+                    ...value,
+                    password: event.target.value,
+                  }))
                 }
                 placeholder="Minimum 6 characters"
                 minLength={6}
@@ -111,7 +117,10 @@ function RegisterPage() {
               <select
                 value={form.targetBand}
                 onChange={(event) =>
-                  setForm((value) => ({ ...value, targetBand: event.target.value }))
+                  setForm((value) => ({
+                    ...value,
+                    targetBand: event.target.value,
+                  }))
                 }
               >
                 <option>5.5</option>
@@ -120,6 +129,8 @@ function RegisterPage() {
                 <option>7.0</option>
                 <option>7.5</option>
                 <option>8.0</option>
+                <option>8.5</option>
+                <option>9.0</option>
               </select>
             </label>
           ) : (
@@ -138,7 +149,11 @@ function RegisterPage() {
             </label>
           )}
           {error ? <p className="error-text">{error}</p> : null}
-          <button className="primary-button" type="submit" disabled={isSubmitting}>
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={isSubmitting}
+          >
             {isSubmitting ? "Creating..." : "Register"}
           </button>
         </form>

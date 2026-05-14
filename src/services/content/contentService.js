@@ -4,7 +4,6 @@ const CONTENT_BUCKET = "content-files";
 const IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 const PDF_MAX_BYTES = 10 * 1024 * 1024;
 const AUDIO_MAX_BYTES = 20 * 1024 * 1024;
-const UPLOAD_TIMEOUT_MS = 45000;
 const IMAGE_MAX_DIMENSION = 1600;
 const IMAGE_QUALITY = 0.82;
 
@@ -171,23 +170,6 @@ function validateRawContentFile(file, kind) {
   }
 }
 
-function withTimeout(promise, label) {
-  let timeoutId;
-  const timeoutPromise = new Promise((_, reject) => {
-    timeoutId = globalThis.setTimeout(() => {
-      reject(
-        new Error(
-          `${label} timed out. Please try a smaller file or check your connection.`
-        )
-      );
-    }, UPLOAD_TIMEOUT_MS);
-  });
-
-  return Promise.race([promise, timeoutPromise]).finally(() => {
-    globalThis.clearTimeout(timeoutId);
-  });
-}
-
 async function loadImage(file) {
   const imageUrl = URL.createObjectURL(file);
 
@@ -290,6 +272,7 @@ async function getCurrentUserId() {
   const { data, error } = await supabase.auth.getUser();
 
   if (error) {
+    console.error("Supabase user lookup failed:", error);
     throw error;
   }
 
@@ -309,16 +292,24 @@ export async function uploadContentFile(
 
   const userId = options.userId || (await getCurrentUserId());
   const path = `${folder}/${userId}/${Date.now()}-${safeFileName(file.name)}`;
-  const { error } = await withTimeout(
-    supabase.storage.from(CONTENT_BUCKET).upload(path, file, {
+
+  const { error } = await supabase.storage
+    .from(CONTENT_BUCKET)
+    .upload(path, file, {
       cacheControl: "3600",
       contentType: file.type || undefined,
       upsert: false,
-    }),
-    `${file.name} upload`
-  );
+    });
 
   if (error) {
+    console.error("Supabase content upload failed:", {
+      bucket: CONTENT_BUCKET,
+      path,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      error,
+    });
     throw error;
   }
 
@@ -368,20 +359,28 @@ export async function uploadContentFiles(files = {}, options = {}) {
     message: "Uploading files to Supabase Storage...",
   });
 
-  const entries = await Promise.all(
-    preparedQueue.map(async (item) => {
-      const publicUrl = await uploadContentFile(item.file, item.folder, {
-        userId,
-      });
-      completed += 1;
-      onProgress({
-        percent: 30 + Math.round((completed / preparedQueue.length) * 50),
-        message: `${completed}/${preparedQueue.length} file upload complete.`,
-      });
+  let entries;
 
-      return [item.key, publicUrl];
-    })
-  );
+  try {
+    entries = await Promise.all(
+      preparedQueue.map(async (item) => {
+        const publicUrl = await uploadContentFile(item.file, item.folder, {
+          userId,
+        });
+        completed += 1;
+        onProgress({
+          percent: 30 + Math.round((completed / preparedQueue.length) * 50),
+          message: `${completed}/${preparedQueue.length} file upload complete.`,
+        });
+
+        return [item.key, publicUrl];
+      })
+    );
+  } catch (error) {
+    console.error("Content files upload flow failed:", error);
+    throw error;
+  }
+
   const urls = Object.fromEntries(entries);
 
   return {
@@ -421,6 +420,7 @@ export async function createContent(payload) {
     .single();
 
   if (error) {
+    console.error("Supabase content insert failed:", { record, error });
     throw error;
   }
 
@@ -455,6 +455,7 @@ export async function updateContent(id, payload) {
     .single();
 
   if (error) {
+    console.error("Supabase content update failed:", { id, record, error });
     throw error;
   }
 

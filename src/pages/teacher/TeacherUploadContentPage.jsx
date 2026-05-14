@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FaChalkboardUser,
   FaChevronDown,
@@ -45,6 +45,7 @@ const initialForm = {
 
 function TeacherUploadContentPage() {
   const { currentUser } = useAuth();
+  const submitLockRef = useRef(false);
   const [form, setForm] = useState(initialForm);
   const [files, setFiles] = useState({ image: null, audio: null, pdf: null });
   const [classes, setClasses] = useState([]);
@@ -96,12 +97,14 @@ function TeacherUploadContentPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (isSubmitting) {
+    if (submitLockRef.current) {
       return;
     }
 
+    submitLockRef.current = true;
     setStatusMessage("");
     setStatusTone("success");
+    setError("");
     setUploadProgress({ percent: 0, message: "" });
     setIsSubmitting(true);
 
@@ -151,13 +154,17 @@ function TeacherUploadContentPage() {
       });
       setStatusMessage("New lesson saved to Supabase and published to the selected class.");
     } catch (requestError) {
+      console.error("Teacher content save failed:", requestError);
       setStatusTone("error");
-      setStatusMessage(requestError.message);
+      setStatusMessage(
+        requestError.message || "Content upload failed. Please try again."
+      );
       setUploadProgress({
         percent: 0,
         message: "",
       });
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };

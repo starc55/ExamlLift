@@ -1654,6 +1654,25 @@ pre {
   padding: 24px;
 }
 
+.upload-progress-panel {
+  display: grid;
+  gap: 12px;
+  padding: 18px 20px;
+  border-radius: 22px;
+  border: 1px solid rgba(202, 162, 77, 0.28);
+  background: linear-gradient(180deg, rgba(255, 252, 248, 0.98), rgba(246, 232, 221, 0.92));
+  box-shadow: 0 16px 36px rgba(77, 12, 22, 0.08);
+}
+
+.upload-progress-panel .progress__label strong {
+  color: var(--primary-dark);
+}
+
+.upload-progress-panel .progress__label span {
+  color: var(--accent-deep);
+  font-weight: 800;
+}
+
 .file-field {
   display: grid;
   gap: 10px;

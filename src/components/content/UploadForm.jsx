@@ -4,22 +4,22 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
       key: "image",
       inputId: "upload-image-file",
       label: "Image upload",
-      accept: "image/*",
-      helper: "Lesson cover or illustration",
+      accept: "image/jpeg,image/png,image/webp",
+      helper: "JPG, PNG, WebP. Large images are resized; max 2MB after optimization.",
     },
     {
       key: "audio",
       inputId: "upload-audio-file",
       label: "Audio upload",
       accept: "audio/*",
-      helper: "Pronunciation or listening support",
+      helper: "MP3, WAV, WebM, or OGG. Max 20MB.",
     },
     {
       key: "pdf",
       inputId: "upload-pdf-file",
       label: "PDF upload",
       accept: "application/pdf",
-      helper: "Worksheet, guide or homework sheet",
+      helper: "Worksheet, guide or homework sheet. Max 10MB.",
     },
   ];
 
@@ -39,6 +39,7 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
             onChange={(event) => onChange("title", event.target.value)}
             placeholder="Lesson title"
             required
+            disabled={isSubmitting}
           />
         </label>
         <label>
@@ -48,6 +49,7 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
             onChange={(event) => onChange("category", event.target.value)}
             placeholder="Grammar / Reading / Speaking"
             required
+            disabled={isSubmitting}
           />
         </label>
         <label>
@@ -55,6 +57,7 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
           <select
             value={form.level}
             onChange={(event) => onChange("level", event.target.value)}
+            disabled={isSubmitting}
           >
             <option>Beginner</option>
             <option>Elementary</option>
@@ -70,6 +73,7 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
             onChange={(event) => onChange("duration", event.target.value)}
             placeholder="15 min"
             required
+            disabled={isSubmitting}
           />
         </label>
       </div>
@@ -81,6 +85,7 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
           rows={4}
           placeholder="Short lesson description"
           required
+          disabled={isSubmitting}
         />
       </label>
       <label>
@@ -90,6 +95,7 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
           onChange={(event) => onChange("lessonNotes", event.target.value)}
           rows={6}
           placeholder="Write short notes. Each paragraph becomes one lesson block."
+          disabled={isSubmitting}
         />
       </label>
       <div className="form-grid">
@@ -100,6 +106,7 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
             onChange={(event) => onChange("assignmentTitle", event.target.value)}
             placeholder="Homework or follow-up task title"
             required
+            disabled={isSubmitting}
           />
         </label>
         <label className="form-grid__wide">
@@ -110,6 +117,7 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
             rows={4}
             placeholder="Describe what the student should submit after the lesson."
             required
+            disabled={isSubmitting}
           />
         </label>
       </div>
@@ -123,6 +131,7 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
               className="file-field__input"
               type="file"
               accept={field.accept}
+              disabled={isSubmitting}
               onChange={(event) => onFileChange(field.key, event.target.files?.[0] || null)}
             />
             <div className="file-field__row">

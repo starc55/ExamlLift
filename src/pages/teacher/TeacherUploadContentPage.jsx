@@ -22,7 +22,8 @@ import {
   deleteContent,
   getAllContent,
   updateContent,
-  uploadContentFile,
+  uploadContentFiles,
+  validateContentFile,
 } from "../../services/content/contentService";
 
 const initialForm = {
@@ -54,6 +55,10 @@ function TeacherUploadContentPage() {
   const [contentItems, setContentItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [uploadProgress, setUploadProgress] = useState({
+    percent: 0,
+    message: "",
+  });
   const [selectedContent, setSelectedContent] = useState(null);
   const [editingContent, setEditingContent] = useState(null);
   const [deletingContent, setDeletingContent] = useState(null);
@@ -91,8 +96,13 @@ function TeacherUploadContentPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (isSubmitting) {
+      return;
+    }
+
     setStatusMessage("");
     setStatusTone("success");
+    setUploadProgress({ percent: 0, message: "" });
     setIsSubmitting(true);
 
     try {
@@ -100,12 +110,13 @@ function TeacherUploadContentPage() {
         throw new Error("Avval class yarating yoki class tanlang.");
       }
 
-      setStatusMessage("Files Supabase Storagega yuklanmoqda...");
-      const [imageUrl, audioUrl, pdfUrl] = await Promise.all([
-        uploadContentFile(files.image, "content-images"),
-        uploadContentFile(files.audio, "content-audio"),
-        uploadContentFile(files.pdf, "content-pdf"),
-      ]);
+      const { imageUrl, audioUrl, pdfUrl } = await uploadContentFiles(files, {
+        userId: currentUser.id,
+        onProgress: (progress) => {
+          setUploadProgress(progress);
+          setStatusMessage(progress.message);
+        },
+      });
 
       const sections = form.lessonNotes
         .split("\n")
@@ -117,6 +128,10 @@ function TeacherUploadContentPage() {
         }));
 
       setStatusMessage("Content metadata databasega saqlanmoqda...");
+      setUploadProgress({
+        percent: 88,
+        message: "Content metadata databasega saqlanmoqda...",
+      });
       const savedContent = await createContent({
         ...form,
         classId: form.classId,
@@ -130,24 +145,48 @@ function TeacherUploadContentPage() {
       setForm({ ...initialForm, classId: classes[0]?.id || "" });
       setFiles({ image: null, audio: null, pdf: null });
       setContentItems((current) => [savedContent, ...current].slice(0, 6));
+      setUploadProgress({
+        percent: 100,
+        message: "Upload complete.",
+      });
       setStatusMessage("New lesson saved to Supabase and published to the selected class.");
     } catch (requestError) {
       setStatusTone("error");
       setStatusMessage(requestError.message);
+      setUploadProgress({
+        percent: 0,
+        message: "",
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleFileChange = (field, file) => {
-    setFiles((current) => ({ ...current, [field]: file }));
-    setForm((current) => ({
-      ...current,
-      fileNames: {
-        ...current.fileNames,
-        [field]: file?.name || "",
-      },
-    }));
+    setStatusMessage("");
+    setError("");
+
+    try {
+      validateContentFile(file, field);
+      setFiles((current) => ({ ...current, [field]: file }));
+      setForm((current) => ({
+        ...current,
+        fileNames: {
+          ...current.fileNames,
+          [field]: file?.name || "",
+        },
+      }));
+    } catch (validationError) {
+      setFiles((current) => ({ ...current, [field]: null }));
+      setForm((current) => ({
+        ...current,
+        fileNames: {
+          ...current.fileNames,
+          [field]: "",
+        },
+      }));
+      setError(validationError.message);
+    }
   };
 
   const selectedClass = classes.find((item) => item.id === form.classId) || null;
@@ -295,6 +334,20 @@ function TeacherUploadContentPage() {
         onSubmit={handleSubmit}
         isSubmitting={isSubmitting}
       />
+      {isSubmitting || uploadProgress.message ? (
+        <section className="upload-progress-panel">
+          <div className="progress__label">
+            <strong>{uploadProgress.message || "Preparing upload..."}</strong>
+            <span>{uploadProgress.percent}%</span>
+          </div>
+          <div className="progress__track">
+            <span
+              className="progress__fill"
+              style={{ width: `${uploadProgress.percent}%` }}
+            />
+          </div>
+        </section>
+      ) : null}
       <ErrorAlert message={error} />
       {statusMessage ? (
         <p className={statusTone === "success" ? "success-text" : "error-text"}>

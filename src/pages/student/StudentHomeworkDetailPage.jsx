@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import AIStatusLoader from "../../components/feedback/AIStatusLoader";
 import CriteriaBreakdown from "../../components/feedback/CriteriaBreakdown";
@@ -10,21 +10,19 @@ import WrongAnswersList from "../../components/feedback/WrongAnswersList";
 import TestCard from "../../components/cards/TestCard";
 import SpeakingRecorder from "../../components/tests/SpeakingRecorder";
 import { useAuth } from "../../context/AuthContext";
-import {
-  getHomeworkFeedback,
-} from "../../services/ai/aiClient";
+import { getHomeworkFeedback } from "../../services/ai/aiClient";
 import { getSavedFeedbackLanguage } from "../../services/ai/feedbackLanguage";
 import {
   getHomeworkById,
   getLatestHomeworkSubmission,
-  saveHomeworkSubmission,
   scoreObjectiveHomework,
+  submitHomework,
+  uploadHomeworkFile,
 } from "../../services/homework/homeworkService";
-import { fileToDataUrl } from "../../utils/fileHelpers";
 
 function buildFileHomeworkFeedback(feedbackLanguage) {
   if (feedbackLanguage === "ru") {
-    return "Общая оценка:\nФайл homework принят. Этот тип задания требует проверки учителем, поэтому AI не выставляет детальную языковую оценку.\n\nУровень CEFR:\nНе определен\n\nСильные стороны:\n* Работа успешно отправлена.\n\nОшибки:\n* Автоматическая языковая проверка для файла не применялась.\n\nРекомендации:\n* Убедитесь, что файл соответствует инструкции.\n\nСледующий шаг:\nДождитесь проверки учителя в разделе submissions.";
+    return "Общая оценка:\nФайл homework принят. Этот тип задания требует проверки учителем, поэтому AI не выставляет подробную языковую оценку.\n\nУровень CEFR:\nНе определен\n\nСильные стороны:\n* Работа успешно загружена.\n\nОшибки:\n* Автоматическая языковая проверка для файла не применялась.\n\nРекомендации:\n* Убедитесь, что файл соответствует инструкции.\n\nСледующий шаг:\nДождитесь проверки учителя в разделе submissions.";
   }
 
   if (feedbackLanguage === "en") {
@@ -37,23 +35,60 @@ function buildFileHomeworkFeedback(feedbackLanguage) {
 function StudentHomeworkDetailPage() {
   const { id } = useParams();
   const { currentUser } = useAuth();
-  const homework = useMemo(() => getHomeworkById(id), [id]);
-  const [latestSubmission, setLatestSubmission] = useState(() =>
-    getLatestHomeworkSubmission(id, currentUser.id)
-  );
+  const [homework, setHomework] = useState(null);
+  const [latestSubmission, setLatestSubmission] = useState(null);
   const [textAnswer, setTextAnswer] = useState("");
   const [objectiveAnswers, setObjectiveAnswers] = useState({});
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileName, setFileName] = useState("");
+  const [pageLoading, setPageLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [feedbackLanguage, setFeedbackLanguage] = useState(getSavedFeedbackLanguage);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadHomework() {
+      setPageLoading(true);
+      setError("");
+
+      try {
+        const [nextHomework, nextSubmission] = await Promise.all([
+          getHomeworkById(id),
+          getLatestHomeworkSubmission(id, currentUser.id),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setHomework(nextHomework);
+        setLatestSubmission(nextSubmission);
+      } catch (requestError) {
+        setError(requestError.message);
+      } finally {
+        setPageLoading(false);
+      }
+    }
+
+    loadHomework();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser.id, id]);
+
+  if (pageLoading) {
+    return <p className="empty-copy">Loading homework...</p>;
+  }
+
   if (!homework) {
     return (
       <section className="card empty-state">
         <h3>Homework topilmadi</h3>
+        <ErrorAlert message={error} />
         <Link to="/student/homework" className="primary-button card-link">
           Back to homework
         </Link>
@@ -69,8 +104,8 @@ function StudentHomeworkDetailPage() {
     "listening_homework",
   ].includes(homework.type);
 
-  const persistSubmission = (payload) => {
-    const saved = saveHomeworkSubmission({
+  const persistSubmission = async (payload) => {
+    const saved = await submitHomework({
       homeworkId: homework.id,
       title: homework.title,
       homeworkType: homework.type,
@@ -111,12 +146,13 @@ function StudentHomeworkDetailPage() {
         deadline: homework.deadline,
       });
 
-      persistSubmission({
+      await persistSubmission({
         status: "submitted",
         score: Math.round(assessment.score),
         total: 100,
         percentage: assessment.score,
         band: assessment.band,
+        cefrLevel: assessment.cefrLevel,
         feedback: assessment.feedback,
         criteria: assessment.criteria,
         answer: trimmedAnswer,
@@ -161,12 +197,13 @@ function StudentHomeworkDetailPage() {
         answers: objectiveAnswers,
       });
 
-      persistSubmission({
+      await persistSubmission({
         status: "submitted",
         score: result.score,
         total: result.total,
         percentage: result.percentage,
         band: assessment.band,
+        cefrLevel: assessment.cefrLevel,
         feedback: assessment.feedback,
         criteria: assessment.criteria,
         answers: objectiveAnswers,
@@ -193,8 +230,8 @@ function StudentHomeworkDetailPage() {
     setMessage("");
 
     try {
-      const fileUrl = await fileToDataUrl(selectedFile);
-      persistSubmission({
+      const fileUrl = await uploadHomeworkFile(selectedFile);
+      await persistSubmission({
         status: "submitted",
         score: 0,
         total: 0,
@@ -291,16 +328,22 @@ function StudentHomeworkDetailPage() {
                   level: homework.level,
                   deadline: homework.deadline,
                 });
+                const audioFile = new File([blob], `speaking-homework-${Date.now()}.webm`, {
+                  type: blob.type || "audio/webm",
+                });
+                const audioUrl = await uploadHomeworkFile(audioFile, "homework-audio");
 
-                persistSubmission({
+                await persistSubmission({
                   status: "submitted",
                   score: Math.round(assessment.score),
                   total: 100,
                   percentage: assessment.score,
                   band: assessment.band,
+                  cefrLevel: assessment.cefrLevel,
                   feedback: assessment.feedback,
                   criteria: assessment.criteria,
                   transcript: assessment.transcript,
+                  audioUrl,
                 });
 
                 return assessment;

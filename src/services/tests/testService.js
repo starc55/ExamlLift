@@ -2,23 +2,12 @@ import finalData from "../../data/tests/final.json";
 import midtermData from "../../data/tests/midterm.json";
 import { vocabularyMatchingData } from "../../data/tests/midtermVocabularyMatching";
 import { contentAssets } from "../../assets/content/assetRegistry";
-import { readStorage, seedStorage, writeStorage } from "../shared/storage";
-
-const TESTS_KEY = "english-platform-tests";
+import { assertSupabaseConfig, supabase } from "../../lib/supabaseClient";
 
 function inferGrammarTopic(prompt) {
-  if (prompt.includes("If I had")) {
-    return "Conditionals";
-  }
-
-  if (prompt.includes("has been")) {
-    return "Present perfect";
-  }
-
-  if (prompt.includes("was given")) {
-    return "Passive voice";
-  }
-
+  if (prompt.includes("If I had")) return "Conditionals";
+  if (prompt.includes("has been")) return "Present perfect";
+  if (prompt.includes("was given")) return "Passive voice";
   return "General grammar";
 }
 
@@ -44,15 +33,15 @@ function buildMidtermVocabularyTest(overrides = {}) {
     questions: vocabularyMatchingQuestions,
     matchingData: vocabularyMatchingData,
     ...overrides,
-    title: vocabularyMatchingData.title,
+    title: overrides.title || vocabularyMatchingData.title,
     stepTitle: "Vocabulary",
-    instructions: vocabularyMatchingData.instruction,
-    questions: vocabularyMatchingQuestions,
+    instructions: overrides.instructions || vocabularyMatchingData.instruction,
+    questions: overrides.questions || vocabularyMatchingQuestions,
     matchingData: vocabularyMatchingData,
   };
 }
 
-const seededTests = [
+const fallbackTests = [
   buildMidtermVocabularyTest(),
   {
     id: "test-grammar-1",
@@ -157,73 +146,205 @@ const seededTests = [
   },
 ];
 
-function ensureTestsSeeded() {
-  seedStorage(TESTS_KEY, seededTests);
-}
+function getFallbackTest(type, examType) {
+  const test = fallbackTests.find(
+    (item) => item.type === type && item.examType === examType
+  );
 
-export function getAllTests() {
-  ensureTestsSeeded();
-  return readStorage(TESTS_KEY, []);
-}
-
-export function getTestsBySection(section) {
-  return getAllTests().filter((test) => test.section === section);
-}
-
-export function getTestByType(type, section) {
-  const test = getAllTests().find((test) => {
-    if (section) {
-      return test.type === type && test.section === section;
-    }
-
-    return test.type === type;
-  });
-
-  if (type === "vocabulary" && section === "midterm") {
+  if (type === "vocabulary" && examType === "midterm") {
     return buildMidtermVocabularyTest(test || {});
   }
 
-  return test;
+  return test || null;
 }
 
-export function createTest(payload) {
-  const tests = getAllTests();
-  const nextTest = {
-    id: `test-${Date.now()}`,
-    title: payload.title,
-    type: payload.type,
-    section: payload.section,
-    instructions: payload.instructions,
-    durationMinutes: Number(payload.durationMinutes) || 10,
-    score: Number(payload.score) || 10,
-    prompt: payload.prompt || "",
-    passageTitle: payload.passageTitle || "",
-    passage: payload.passage || "",
-    audioUrl: payload.audioUrl || "",
-    questions: payload.questions || [],
+function mapDbTest(row) {
+  if (!row) {
+    return null;
+  }
+
+  const data = row.data || {};
+  const type = row.section || data.type || "mixed";
+  const examType = row.exam_type || data.examType || "practice";
+
+  return {
+    id: row.id,
+    teacherId: row.teacher_id,
+    classId: row.class_id,
+    title: row.title,
+    type,
+    section: examType,
+    examType,
+    instructions: row.instructions || "",
+    durationMinutes: Number(data.durationMinutes || 10),
+    score: Number(data.score || 10),
+    level: data.level || "Intermediate",
+    prompt: data.prompt || "",
+    taskTitle: data.taskTitle || row.title,
+    passageTitle: data.passageTitle || "",
+    passage: data.passage || "",
+    passageSummary: data.passageSummary || "",
+    audioUrl: data.audioUrl || "",
+    audioTitle: data.audioTitle || "",
+    topic: data.topic || "",
+    questions: data.questions || [],
+    matchingData:
+      type === "vocabulary" && examType === "midterm"
+        ? vocabularyMatchingData
+        : data.matchingData,
+    createdAt: row.created_at,
   };
-
-  writeStorage(TESTS_KEY, [nextTest, ...tests]);
-  return nextTest;
 }
 
-export function updateTest(id, updates) {
-  const tests = getAllTests().map((test) =>
-    test.id === id
-      ? {
-          ...test,
-          ...updates,
-          durationMinutes: Number(updates.durationMinutes ?? test.durationMinutes),
-          score: Number(updates.score ?? test.score),
-        }
-      : test
-  );
+function toDbRecord(payload, teacherId) {
+  const type = payload.type || payload.section || "mixed";
+  const examType = payload.examType || payload.section || "practice";
 
-  writeStorage(TESTS_KEY, tests);
-  return tests.find((test) => test.id === id) || null;
+  return {
+    teacher_id: payload.teacherId || payload.teacher_id || teacherId,
+    class_id: payload.classId || payload.class_id || null,
+    title: payload.title.trim(),
+    exam_type: examType,
+    section: type,
+    instructions: payload.instructions || "",
+    data: {
+      durationMinutes: Number(payload.durationMinutes) || 10,
+      score: Number(payload.score) || 10,
+      level: payload.level || "Intermediate",
+      prompt: payload.prompt || "",
+      taskTitle: payload.taskTitle || payload.title,
+      passageTitle: payload.passageTitle || "",
+      passage: payload.passage || "",
+      passageSummary: payload.passageSummary || "",
+      audioUrl: payload.audioUrl || "",
+      audioTitle: payload.audioTitle || "",
+      topic: payload.topic || "",
+      questions: payload.questions || [],
+      matchingData: payload.matchingData || null,
+    },
+  };
 }
 
-export function deleteTest(id) {
-  const tests = getAllTests().filter((test) => test.id !== id);
-  writeStorage(TESTS_KEY, tests);
+async function getCurrentUserId() {
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error) {
+    throw error;
+  }
+
+  return data.user?.id;
+}
+
+export async function getAllTests() {
+  assertSupabaseConfig();
+
+  const { data, error } = await supabase
+    .from("tests")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []).map(mapDbTest);
+}
+
+export async function getTeacherTests() {
+  return getAllTests();
+}
+
+export async function getStudentTestsByClass(classId) {
+  assertSupabaseConfig();
+
+  let query = supabase
+    .from("tests")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (classId) {
+    query = query.eq("class_id", classId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []).map(mapDbTest);
+}
+
+export async function getTestsBySection(section) {
+  const tests = await getAllTests();
+  return tests.filter((test) => test.section === section);
+}
+
+export async function getTestByType(type, examType, classId = null) {
+  assertSupabaseConfig();
+
+  let query = supabase
+    .from("tests")
+    .select("*")
+    .eq("section", type)
+    .eq("exam_type", examType)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (classId) {
+    query = query.eq("class_id", classId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw error;
+  }
+
+  return mapDbTest(data?.[0]) || getFallbackTest(type, examType);
+}
+
+export async function createTest(payload) {
+  assertSupabaseConfig();
+
+  const teacherId = await getCurrentUserId();
+  const { data, error } = await supabase
+    .from("tests")
+    .insert(toDbRecord(payload, teacherId))
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapDbTest(data);
+}
+
+export async function updateTest(id, updates) {
+  assertSupabaseConfig();
+
+  const teacherId = await getCurrentUserId();
+  const { data, error } = await supabase
+    .from("tests")
+    .update(toDbRecord(updates, teacherId))
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapDbTest(data);
+}
+
+export async function deleteTest(id) {
+  assertSupabaseConfig();
+
+  const { error } = await supabase.from("tests").delete().eq("id", id);
+
+  if (error) {
+    throw error;
+  }
 }

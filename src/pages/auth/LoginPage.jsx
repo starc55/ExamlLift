@@ -5,14 +5,14 @@ import { getDefaultRouteByRole } from "../../constants/roles";
 import { useAuth } from "../../context/AuthContext";
 
 function LoginPage() {
-  const { currentUser, login } = useAuth();
+  const { authError, currentUser, loading, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (currentUser) {
+  if (!loading && currentUser) {
     return <Navigate to={getDefaultRouteByRole(currentUser.role)} replace />;
   }
 
@@ -44,8 +44,7 @@ function LoginPage() {
           </div>
         </div>
         <p className="auth-intro">
-          Sign in with your account to access the student or teacher panel. Demo
-          login credentials are available below.
+          Sign in with your account to access the student or teacher panel.
         </p>
         <form className="auth-form" onSubmit={handleSubmit}>
           <label>
@@ -72,6 +71,7 @@ function LoginPage() {
               required
             />
           </label>
+          {authError ? <p className="error-text">{authError}</p> : null}
           {error ? <p className="error-text">{error}</p> : null}
           <button
             className="primary-button"
@@ -81,19 +81,6 @@ function LoginPage() {
             {isSubmitting ? "Signing in..." : "Login"}
           </button>
         </form>
-
-        <div className="demo-credentials">
-          <div className="demo-credentials__card">
-            <strong>Student demo</strong>
-            <span>student@example.com</span>
-            <span>student123</span>
-          </div>
-          <div className="demo-credentials__card">
-            <strong>Teacher demo</strong>
-            <span>teacher@example.com</span>
-            <span>teacher123</span>
-          </div>
-        </div>
 
         <p className="auth-switch">
           Don't have an account? <Link to="/register">Register</Link>

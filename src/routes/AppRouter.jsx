@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import LoadingScreen from "../components/LoadingScreen";
 import Layout from "../components/layout/Layout";
 import { getDefaultRouteByRole, ROLES } from "../constants/roles";
 import { useAuth } from "../context/AuthContext";
@@ -14,6 +15,8 @@ import StudentMidtermPage from "../pages/student/StudentMidtermPage";
 import StudentProfilePage from "../pages/student/StudentProfilePage";
 import StudentResultsPage from "../pages/student/StudentResultsPage";
 import TeacherAnalyticsPage from "../pages/teacher/TeacherAnalyticsPage";
+import TeacherClassDetailPage from "../pages/teacher/TeacherClassDetailPage";
+import TeacherClassesPage from "../pages/teacher/TeacherClassesPage";
 import TeacherDashboardPage from "../pages/teacher/TeacherDashboardPage";
 import TeacherHomeworkPage from "../pages/teacher/TeacherHomeworkPage";
 import TeacherHomeworkSubmissionsPage from "../pages/teacher/TeacherHomeworkSubmissionsPage";
@@ -25,7 +28,15 @@ import ProtectedRoute from "./ProtectedRoute";
 import RoleRoute from "./RoleRoute";
 
 function RootRedirect() {
-  const { currentUser } = useAuth();
+  const { authError, currentUser, loading } = useAuth();
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  if (authError) {
+    return <Navigate to="/login" replace />;
+  }
 
   if (!currentUser) {
     return <Navigate to="/login" replace />;
@@ -58,9 +69,11 @@ function AppRouter() {
           </Route>
 
           <Route element={<RoleRoute allowedRoles={[ROLES.TEACHER]} />}>
-            <Route path="/teacher" element={<Layout />}>
-              <Route path="dashboard" element={<TeacherDashboardPage />} />
-              <Route path="homework" element={<TeacherHomeworkPage />} />
+              <Route path="/teacher" element={<Layout />}>
+                <Route path="dashboard" element={<TeacherDashboardPage />} />
+                <Route path="classes" element={<TeacherClassesPage />} />
+                <Route path="classes/:id" element={<TeacherClassDetailPage />} />
+                <Route path="homework" element={<TeacherHomeworkPage />} />
               <Route path="homework/submissions" element={<TeacherHomeworkSubmissionsPage />} />
               <Route path="upload-content" element={<TeacherUploadContentPage />} />
               <Route path="manage-tests" element={<TeacherManageTestsPage />} />

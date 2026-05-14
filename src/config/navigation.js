@@ -3,6 +3,7 @@ import {
   FaChartColumn,
   FaChartLine,
   FaClipboardCheck,
+  FaChalkboardUser,
   FaFileArrowUp,
   FaFileLines,
   FaGaugeHigh,
@@ -29,6 +30,7 @@ export const navigationByRole = {
   ],
   [ROLES.TEACHER]: [
     { to: "/teacher/dashboard", label: "Dashboard", icon: FaHouse },
+    { to: "/teacher/classes", label: "Classes", icon: FaChalkboardUser },
     { to: "/teacher/homework", label: "Homework", icon: FaFileLines },
     {
       to: "/teacher/upload-content",
@@ -51,6 +53,7 @@ const routeTitles = {
   "/student/results": "Result Center",
   "/student/profile": "Student Profile",
   "/teacher/dashboard": "Teacher Dashboard",
+  "/teacher/classes": "Classes",
   "/teacher/homework": "Homework Management",
   "/teacher/homework/submissions": "Homework Submissions",
   "/teacher/upload-content": "Upload Content",
@@ -69,6 +72,10 @@ export function resolvePageTitle(pathname) {
 
   if (pathname.startsWith("/student/homework/")) {
     return "Homework Detail";
+  }
+
+  if (pathname.startsWith("/teacher/classes/")) {
+    return "Class Detail";
   }
 
   return routeTitles[pathname] || "English Learning Platform";

@@ -1,17 +1,63 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import DashboardCard from "../../components/dashboard/DashboardCard";
+import ErrorAlert from "../../components/feedback/ErrorAlert";
 import TestCard from "../../components/cards/TestCard";
 import { useAuth } from "../../context/AuthContext";
 import {
-  getAllHomework,
   getHomeworkSubmissionsByStudent,
   getLatestHomeworkSubmission,
+  getStudentHomeworks,
 } from "../../services/homework/homeworkService";
 
 function StudentHomeworkPage() {
   const { currentUser } = useAuth();
-  const homeworkItems = getAllHomework();
-  const submissions = getHomeworkSubmissionsByStudent(currentUser.id);
+  const [homeworkItems, setHomeworkItems] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
+  const [latestByHomework, setLatestByHomework] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadHomework() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const [nextHomework, nextSubmissions] = await Promise.all([
+          getStudentHomeworks(),
+          getHomeworkSubmissionsByStudent(currentUser.id),
+        ]);
+        const latestEntries = await Promise.all(
+          nextHomework.map(async (homework) => [
+            homework.id,
+            await getLatestHomeworkSubmission(homework.id, currentUser.id),
+          ])
+        );
+
+        if (!isMounted) {
+          return;
+        }
+
+        setHomeworkItems(nextHomework);
+        setSubmissions(nextSubmissions);
+        setLatestByHomework(Object.fromEntries(latestEntries));
+      } catch (requestError) {
+        setError(requestError.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadHomework();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser.id]);
+
   const completedCount = submissions.length;
   const averagePercentage = submissions.length
     ? Math.round(
@@ -34,9 +80,18 @@ function StudentHomeworkPage() {
         </div>
       </section>
 
+      {loading ? <p className="empty-copy">Loading homework...</p> : null}
+      <ErrorAlert message={error} />
+
       <section className="dashboard-grid dashboard-grid--features">
+        {!loading && !homeworkItems.length ? (
+          <section className="card empty-state">
+            <h3>No homework yet</h3>
+            <p>Join a class or wait for your teacher to create homework.</p>
+          </section>
+        ) : null}
         {homeworkItems.map((homework) => {
-          const latestSubmission = getLatestHomeworkSubmission(homework.id, currentUser.id);
+          const latestSubmission = latestByHomework[homework.id];
 
           return (
             <TestCard

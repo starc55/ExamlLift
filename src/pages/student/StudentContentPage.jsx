@@ -1,9 +1,39 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ContentCard from "../../components/content/ContentCard";
+import ErrorAlert from "../../components/feedback/ErrorAlert";
 import { getAllContent } from "../../services/content/contentService";
 
 function StudentContentPage() {
-  const [contentItems] = useState(() => getAllContent());
+  const [contentItems, setContentItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadContent() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const data = await getAllContent();
+
+        if (isMounted) {
+          setContentItems(data);
+        }
+      } catch (requestError) {
+        setError(requestError.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadContent();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <div className="page-stack">
@@ -14,7 +44,16 @@ function StudentContentPage() {
         </div>
       </section>
 
+      {loading ? <p className="empty-copy">Loading content...</p> : null}
+      <ErrorAlert message={error} />
+
       <section className="content-library content-library--single-column">
+        {!loading && !contentItems.length ? (
+          <section className="card empty-state">
+            <h3>No content yet</h3>
+            <p>Join a class or wait for your teacher to publish lessons.</p>
+          </section>
+        ) : null}
         {contentItems.map((item) => (
           <ContentCard
             key={item.id}

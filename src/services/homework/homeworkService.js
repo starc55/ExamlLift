@@ -1,179 +1,239 @@
-import { readStorage, seedStorage, writeStorage } from "../shared/storage";
+import { assertSupabaseConfig, supabase } from "../../lib/supabaseClient";
+import { uploadContentFile } from "../content/contentService";
 
-const HOMEWORK_KEY = "english-platform-homework";
-const HOMEWORK_SUBMISSIONS_KEY = "english-platform-homework-submissions";
+function toDbHomeworkType(type = "writing") {
+  return String(type).replace(/_homework$/, "");
+}
 
-const seededHomework = [
-  {
-    id: "homework-seed-1",
-    title: "Present Perfect Reflection",
-    instructions:
-      "Write 120-150 words about a recent achievement using present perfect at least three times.",
-    type: "writing_homework",
-    level: "Intermediate",
-    examType: "homework",
-    deadline: "2026-05-20",
-    attachmentName: "",
-    attachmentUrl: "",
-    correctAnswers: null,
-    createdBy: "teacher-demo",
-    createdByName: "Dilshod Rahimov",
-    createdAt: "2026-05-05T09:00:00.000Z",
-  },
-  {
-    id: "homework-seed-2",
-    title: "Travel Vocabulary Matching",
-    instructions:
-      "Match the travel-related terms with the correct meanings and review the confusing pairs.",
-    type: "vocabulary_homework",
-    level: "Intermediate",
-    examType: "homework",
-    deadline: "2026-05-22",
-    attachmentName: "",
-    attachmentUrl: "",
-    correctAnswers: {
-      items: [
-        {
-          term: "Passport",
-          correctAnswer: "Official travel identification document",
-        },
-        {
-          term: "Boarding pass",
-          correctAnswer: "Document used to enter the plane",
-        },
-      ],
-    },
-    createdBy: "teacher-demo",
-    createdByName: "Dilshod Rahimov",
-    createdAt: "2026-05-06T10:00:00.000Z",
-  },
-  {
-    id: "homework-seed-3",
-    title: "Speaking Voice Note",
-    instructions:
-      "Record a short voice note about a place where you study well and explain why it helps you.",
-    type: "speaking_homework",
-    level: "Intermediate",
-    examType: "homework",
-    deadline: "2026-05-24",
-    attachmentName: "",
-    attachmentUrl: "",
-    correctAnswers: null,
-    createdBy: "teacher-demo",
-    createdByName: "Dilshod Rahimov",
-    createdAt: "2026-05-07T08:30:00.000Z",
-  },
-];
+function toUiHomeworkType(type = "writing") {
+  return type.endsWith("_homework") ? type : `${type}_homework`;
+}
 
-const seededSubmissions = [
-  {
-    id: "homework-submission-seed-1",
-    homeworkId: "homework-seed-1",
-    title: "Present Perfect Reflection",
-    homeworkType: "writing_homework",
-    studentId: "student-demo",
-    studentName: "Amina Karimova",
-    status: "submitted",
-    score: 74,
+function mapHomework(row) {
+  if (!row) {
+    return null;
+  }
+
+  const data = row.data || {};
+  const type = toUiHomeworkType(row.homework_type);
+
+  return {
+    id: row.id,
+    teacherId: row.teacher_id,
+    teacher_id: row.teacher_id,
+    classId: row.class_id,
+    class_id: row.class_id,
+    title: row.title,
+    instructions: row.instructions || "",
+    type,
+    homeworkType: type,
+    level: data.level || "Intermediate",
+    examType: "homework",
+    deadline: row.deadline ? row.deadline.slice(0, 10) : "",
+    attachmentName: data.attachmentName || "",
+    attachmentUrl: data.attachmentUrl || "",
+    correctAnswers: data.correctAnswers || null,
+    createdBy: row.teacher_id,
+    createdByName: row.profiles?.full_name || "Teacher",
+    createdAt: row.created_at,
+    created_at: row.created_at,
+  };
+}
+
+function mapSubmission(row) {
+  if (!row) {
+    return null;
+  }
+
+  const homework = row.homeworks || {};
+  const homeworkType = toUiHomeworkType(homework.homework_type || "homework");
+  const percentage = Number(row.percentage || 0);
+
+  return {
+    id: row.id,
+    homeworkId: row.homework_id,
+    homework_id: row.homework_id,
+    title: homework.title || "Homework",
+    homeworkType,
+    studentId: row.student_id,
+    student_id: row.student_id,
+    studentName: row.profiles?.full_name || "Student",
+    teacherId: homework.teacher_id || null,
+    teacher_id: homework.teacher_id || null,
+    classId: homework.class_id || null,
+    status: row.status || "submitted",
+    score: Number(row.score || 0),
     total: 100,
-    percentage: 74,
-    band: 6.5,
-    feedback:
-      "Umumiy baho:\nWriting homework savolga mos va mazmunli. Asosiy fikrlar tushunarli, lekin ba'zi jumlalar yanada tabiiyroq bog'lansa yaxshi bo'ladi.\n\nXatolar:\n* Present perfect bilan past simple ayrim joylarda yaqin ishlatilgan.\n* Bitta fikr yetarli misol bilan ochilmagan.\n\nTavsiyalar:\n* Har bandda bitta aniq misol qo'shing.\n* Tense tanlovini tekshirib, signal words ishlating.\n\nKeyingi qadam:\nShu matndan ikkita gapni qayta yozib, tense farqini mustahkamlang.",
-    criteria: {
-      completion: 7,
-      accuracy: 6.5,
-      communication: 6.5,
-      improvementReadiness: 7,
-    },
-    answer:
-      "I have recently learned how to manage my study plan better, and it has improved my confidence a lot.",
+    percentage,
+    percent: percentage,
+    cefrLevel: row.cefr_level || "",
+    band: row.cefr_level || null,
+    feedback: row.ai_feedback || "",
+    aiFeedback: row.ai_feedback || "",
+    criteria: {},
+    answer: row.answer_text || "",
     answers: null,
     wrongAnswers: [],
-    transcript: "",
+    transcript: row.answer_text || "",
     fileName: "",
-    fileUrl: "",
-    submittedAt: "2026-05-08T09:45:00.000Z",
-  },
-];
-
-function ensureSeeded() {
-  seedStorage(HOMEWORK_KEY, seededHomework);
-  seedStorage(HOMEWORK_SUBMISSIONS_KEY, seededSubmissions);
-}
-
-function normalizeSubmission(submission) {
-  return {
-    ...submission,
-    total: submission.total ?? 100,
-    percentage: submission.percentage ?? submission.percent ?? 0,
-    percent: submission.percent ?? submission.percentage ?? 0,
-    band: submission.band ?? null,
-    criteria: submission.criteria || {},
-    wrongAnswers: submission.wrongAnswers || [],
-    answers: submission.answers || null,
-    transcript: submission.transcript || "",
-    fileName: submission.fileName || "",
-    fileUrl: submission.fileUrl || "",
+    fileUrl: row.file_url || "",
+    audioUrl: row.audio_url || "",
+    submittedAt: row.submitted_at,
+    submitted_at: row.submitted_at,
   };
 }
 
-export function getAllHomework() {
-  ensureSeeded();
+async function getCurrentUserId() {
+  const { data, error } = await supabase.auth.getUser();
 
-  return readStorage(HOMEWORK_KEY, []).sort(
-    (left, right) => new Date(right.createdAt) - new Date(left.createdAt)
-  );
+  if (error) {
+    throw error;
+  }
+
+  return data.user?.id;
 }
 
-export function getHomeworkById(id) {
-  return getAllHomework().find((item) => item.id === id) || null;
+export async function uploadHomeworkFile(file, folder = "homework") {
+  return uploadContentFile(file, folder);
 }
 
-export function createHomework(payload) {
-  const current = getAllHomework();
-  const nextHomework = {
-    id: `homework-${Date.now()}`,
-    title: payload.title,
-    instructions: payload.instructions,
-    type: payload.type,
-    level: payload.level || "Intermediate",
-    examType: payload.examType || "homework",
-    deadline: payload.deadline || "",
-    attachmentName: payload.attachmentName || "",
-    attachmentUrl: payload.attachmentUrl || "",
-    correctAnswers: payload.correctAnswers || null,
-    createdBy: payload.createdBy,
-    createdByName: payload.createdByName,
-    createdAt: new Date().toISOString(),
+export async function getAllHomework() {
+  assertSupabaseConfig();
+
+  const { data, error } = await supabase
+    .from("homeworks")
+    .select("*, profiles:teacher_id(full_name)")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []).map(mapHomework);
+}
+
+export async function getTeacherHomeworks() {
+  return getAllHomework();
+}
+
+export async function getStudentHomeworks(classId = null) {
+  assertSupabaseConfig();
+
+  let query = supabase
+    .from("homeworks")
+    .select("*, profiles:teacher_id(full_name)")
+    .order("created_at", { ascending: false });
+
+  if (classId) {
+    query = query.eq("class_id", classId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []).map(mapHomework);
+}
+
+export async function getHomeworkById(id) {
+  assertSupabaseConfig();
+
+  const { data, error } = await supabase
+    .from("homeworks")
+    .select("*, profiles:teacher_id(full_name)")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapHomework(data);
+}
+
+export async function createHomework(payload) {
+  assertSupabaseConfig();
+
+  const teacherId = payload.teacherId || payload.teacher_id || (await getCurrentUserId());
+  const record = {
+    teacher_id: teacherId,
+    class_id: payload.classId || payload.class_id || null,
+    title: payload.title.trim(),
+    instructions: payload.instructions || "",
+    homework_type: toDbHomeworkType(payload.type || payload.homeworkType),
+    data: {
+      level: payload.level || "Intermediate",
+      attachmentName: payload.attachmentName || "",
+      attachmentUrl: payload.attachmentUrl || "",
+      correctAnswers: payload.correctAnswers || null,
+    },
+    deadline: payload.deadline || null,
   };
 
-  writeStorage(HOMEWORK_KEY, [nextHomework, ...current]);
-  return nextHomework;
+  const { data, error } = await supabase
+    .from("homeworks")
+    .insert(record)
+    .select("*, profiles:teacher_id(full_name)")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapHomework(data);
 }
 
-export function getAllHomeworkSubmissions() {
-  ensureSeeded();
+export async function getAllHomeworkSubmissions() {
+  assertSupabaseConfig();
 
-  return readStorage(HOMEWORK_SUBMISSIONS_KEY, [])
-    .map(normalizeSubmission)
-    .sort((left, right) => new Date(right.submittedAt) - new Date(left.submittedAt));
+  const { data, error } = await supabase
+    .from("homework_submissions")
+    .select(
+      "*, profiles:student_id(full_name, email), homeworks(id, title, teacher_id, class_id, homework_type)"
+    )
+    .order("submitted_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []).map(mapSubmission);
 }
 
-export function getHomeworkSubmissionsByStudent(studentId) {
-  return getAllHomeworkSubmissions().filter((item) => item.studentId === studentId);
+export async function getHomeworkSubmissions() {
+  return getAllHomeworkSubmissions();
 }
 
-export function getHomeworkSubmissionsByHomework(homeworkId) {
-  return getAllHomeworkSubmissions().filter((item) => item.homeworkId === homeworkId);
+export async function getHomeworkSubmissionsByStudent(studentId) {
+  const submissions = await getAllHomeworkSubmissions();
+  return submissions.filter((item) => item.studentId === studentId);
 }
 
-export function getLatestHomeworkSubmission(homeworkId, studentId) {
-  return (
-    getAllHomeworkSubmissions().find(
-      (item) => item.homeworkId === homeworkId && item.studentId === studentId
-    ) || null
-  );
+export async function getHomeworkSubmissionsByHomework(homeworkId) {
+  const submissions = await getAllHomeworkSubmissions();
+  return submissions.filter((item) => item.homeworkId === homeworkId);
+}
+
+export async function getLatestHomeworkSubmission(homeworkId, studentId) {
+  assertSupabaseConfig();
+
+  const { data, error } = await supabase
+    .from("homework_submissions")
+    .select(
+      "*, profiles:student_id(full_name, email), homeworks(id, title, teacher_id, class_id, homework_type)"
+    )
+    .eq("homework_id", homeworkId)
+    .eq("student_id", studentId)
+    .order("submitted_at", { ascending: false })
+    .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  return mapSubmission(data?.[0]);
 }
 
 export function scoreObjectiveHomework(correctAnswers, answers) {
@@ -215,15 +275,43 @@ export function scoreObjectiveHomework(correctAnswers, answers) {
   };
 }
 
-export function saveHomeworkSubmission(payload) {
-  const current = getAllHomeworkSubmissions();
-  const nextSubmission = normalizeSubmission({
-    id: `homework-submission-${Date.now()}`,
-    ...payload,
-    submittedAt: payload.submittedAt || new Date().toISOString(),
-    status: payload.status || "submitted",
-  });
+export async function submitHomework(payload) {
+  assertSupabaseConfig();
 
-  writeStorage(HOMEWORK_SUBMISSIONS_KEY, [nextSubmission, ...current]);
-  return nextSubmission;
+  const studentId = payload.studentId || payload.student_id || (await getCurrentUserId());
+  const record = {
+    homework_id: payload.homeworkId || payload.homework_id,
+    student_id: studentId,
+    answer_text: payload.answer || payload.answerText || payload.transcript || "",
+    file_url: payload.fileUrl || payload.file_url || "",
+    audio_url: payload.audioUrl || payload.audio_url || "",
+    score: payload.score ?? null,
+    percentage: payload.percentage ?? payload.percent ?? null,
+    cefr_level: payload.cefrLevel || payload.band || null,
+    ai_feedback: payload.feedback || payload.aiFeedback || "",
+    status: payload.status || "submitted",
+  };
+
+  const { data, error } = await supabase
+    .from("homework_submissions")
+    .insert(record)
+    .select(
+      "*, profiles:student_id(full_name, email), homeworks(id, title, teacher_id, class_id, homework_type)"
+    )
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    ...mapSubmission(data),
+    criteria: payload.criteria || {},
+    wrongAnswers: payload.wrongAnswers || [],
+    answers: payload.answers || null,
+    total: payload.total ?? 100,
+    band: payload.band ?? payload.cefrLevel ?? null,
+  };
 }
+
+export const saveHomeworkSubmission = submitHomework;

@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import CriteriaBreakdown from "../../components/feedback/CriteriaBreakdown";
+import ErrorAlert from "../../components/feedback/ErrorAlert";
 import FeedbackCard from "../../components/feedback/FeedbackCard";
 import ScoreSummary from "../../components/feedback/ScoreSummary";
 import WrongAnswersList from "../../components/feedback/WrongAnswersList";
@@ -10,7 +11,36 @@ function TeacherHomeworkSubmissionsPage() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("all");
   const [selectedSubmission, setSelectedSubmission] = useState(null);
-  const submissions = useMemo(() => getAllHomeworkSubmissions(), []);
+  const [submissions, setSubmissions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadSubmissions() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const data = await getAllHomeworkSubmissions();
+
+        if (isMounted) {
+          setSubmissions(data);
+        }
+      } catch (requestError) {
+        setError(requestError.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadSubmissions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const studentOptions = [...new Set(submissions.map((item) => item.studentName))];
   const filteredSubmissions = submissions.filter((submission) => {
@@ -53,6 +83,9 @@ function TeacherHomeworkSubmissionsPage() {
           </select>
         </div>
       </section>
+
+      {loading ? <p className="empty-copy">Loading submissions...</p> : null}
+      <ErrorAlert message={error} />
 
       <section className="card">
         <div className="table-scroll">

@@ -1,14 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import TestCard from "../../components/cards/TestCard";
 import ErrorAlert from "../../components/feedback/ErrorAlert";
 import { useAuth } from "../../context/AuthContext";
-import { createHomework, getAllHomework } from "../../services/homework/homeworkService";
-import { fileToDataUrl } from "../../utils/fileHelpers";
+import { getTeacherClasses } from "../../services/classes/classService";
+import {
+  createHomework,
+  getTeacherHomeworks,
+  uploadHomeworkFile,
+} from "../../services/homework/homeworkService";
 
 const initialForm = {
   title: "",
+  classId: "",
   instructions: "",
   type: "writing_homework",
   level: "Intermediate",
@@ -19,12 +24,40 @@ const initialForm = {
 function TeacherHomeworkPage() {
   const { currentUser } = useAuth();
   const [form, setForm] = useState(initialForm);
+  const [classes, setClasses] = useState([]);
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [homeworkItems, setHomeworkItems] = useState(() => getAllHomework());
+  const [pageLoading, setPageLoading] = useState(true);
+  const [homeworkItems, setHomeworkItems] = useState([]);
+
+  const loadPageData = async () => {
+    setPageLoading(true);
+    setError("");
+
+    try {
+      const [nextClasses, nextHomework] = await Promise.all([
+        getTeacherClasses(),
+        getTeacherHomeworks(),
+      ]);
+      setClasses(nextClasses);
+      setHomeworkItems(nextHomework);
+      setForm((current) => ({
+        ...current,
+        classId: current.classId || nextClasses[0]?.id || "",
+      }));
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setPageLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPageData();
+  }, []);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -33,13 +66,18 @@ function TeacherHomeworkPage() {
     setStatusMessage("");
 
     try {
-      const attachmentUrl = await fileToDataUrl(file);
+      if (!form.classId) {
+        throw new Error("Avval class tanlang.");
+      }
+
+      const attachmentUrl = await uploadHomeworkFile(file, "homework-attachments");
       const correctAnswers = form.correctAnswersText.trim()
         ? JSON.parse(form.correctAnswersText)
         : null;
 
-      createHomework({
+      await createHomework({
         title: form.title,
+        classId: form.classId,
         instructions: form.instructions,
         type: form.type,
         level: form.level,
@@ -47,18 +85,16 @@ function TeacherHomeworkPage() {
         attachmentName: fileName,
         attachmentUrl,
         correctAnswers,
-        createdBy: currentUser.id,
-        createdByName: currentUser.fullname,
+        teacherId: currentUser.id,
       });
 
-      setHomeworkItems(getAllHomework());
-      setForm(initialForm);
+      await loadPageData();
+      setForm({ ...initialForm, classId: classes[0]?.id || "" });
       setFile(null);
       setFileName("");
-      setStatusMessage("Homework muvaffaqiyatli yaratildi.");
+      setStatusMessage("Homework Supabasega saqlandi.");
     } catch (requestError) {
-      setError("Correct answers JSON noto'g'ri yoki faylni o'qishda xatolik bor.");
-      console.error(requestError);
+      setError(requestError.message || "Correct answers JSON noto'g'ri yoki faylni yuklashda xatolik bor.");
     } finally {
       setLoading(false);
     }
@@ -72,17 +108,36 @@ function TeacherHomeworkPage() {
         <DashboardCard label="AI-enabled types" value={homeworkItems.filter((item) => item.type !== "file_homework").length} helper="Submit with AI support" tone="success" />
       </section>
 
+      {pageLoading ? <p className="empty-copy">Loading homework...</p> : null}
+      <ErrorAlert message={error} />
+
       <TestCard
         title="Create homework"
-        description="Add deadline, type, optional attachment, and optional correct answers JSON."
-        stats="Production-style local storage workflow"
+        description="Add class, deadline, type, optional attachment, and optional correct answers JSON."
+        stats="Supabase database workflow"
       >
         <form className="assignment-form" onSubmit={handleSubmit}>
+          <label>
+            Class
+            <select
+              value={form.classId}
+              onChange={(event) => setForm((current) => ({ ...current, classId: event.target.value }))}
+              required
+            >
+              <option value="">Select class</option>
+              {classes.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             Title
             <input
               value={form.title}
               onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+              required
             />
           </label>
           <label>
@@ -93,6 +148,7 @@ function TeacherHomeworkPage() {
               onChange={(event) =>
                 setForm((current) => ({ ...current, instructions: event.target.value }))
               }
+              required
             />
           </label>
           <label>
@@ -155,7 +211,6 @@ function TeacherHomeworkPage() {
               <strong className="file-field__name">{fileName || "No file selected"}</strong>
             </div>
           </div>
-          <ErrorAlert message={error} />
           {statusMessage ? <p className="success-text">{statusMessage}</p> : null}
           <button className="primary-button" type="submit" disabled={loading}>
             {loading ? "Saving..." : "Create homework"}
@@ -174,6 +229,12 @@ function TeacherHomeworkPage() {
       </section>
 
       <section className="dashboard-grid dashboard-grid--features">
+        {!pageLoading && !homeworkItems.length ? (
+          <section className="card empty-state">
+            <h3>No homework yet</h3>
+            <p>Create the first homework for one of your classes.</p>
+          </section>
+        ) : null}
         {homeworkItems.map((homework) => (
           <TestCard
             key={homework.id}

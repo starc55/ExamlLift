@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FaChartSimple,
   FaClock,
@@ -9,16 +9,18 @@ import {
   FaTrashCan,
 } from "react-icons/fa6";
 import DashboardCard from "../../components/dashboard/DashboardCard";
+import ErrorAlert from "../../components/feedback/ErrorAlert";
 import Modal from "../../components/layout/Modal";
+import { getTeacherClasses } from "../../services/classes/classService";
 import {
   createTest,
   deleteTest,
-  getAllTests,
+  getTeacherTests,
   updateTest,
 } from "../../services/tests/testService";
 
 const TEST_TYPES = ["vocabulary", "grammar", "reading", "listening", "writing", "speaking"];
-const TEST_SECTIONS = ["midterm", "final"];
+const TEST_SECTIONS = ["midterm", "final", "practice"];
 
 function createEmptyQuestion() {
   return {
@@ -32,6 +34,7 @@ function createEmptyQuestion() {
 function createEmptyForm() {
   return {
     id: null,
+    classId: "",
     title: "",
     type: "vocabulary",
     section: "midterm",
@@ -47,12 +50,16 @@ function createEmptyForm() {
 }
 
 function TeacherManageTestsPage() {
-  const [tests, setTests] = useState(() => getAllTests());
+  const [tests, setTests] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState(createEmptyForm());
   const [searchTerm, setSearchTerm] = useState("");
   const [sectionFilter, setSectionFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const isQuestionBased = useMemo(
     () => !["writing", "speaking"].includes(form.type),
@@ -88,16 +95,53 @@ function TeacherManageTestsPage() {
     });
   }, [sectionFilter, searchTerm, tests, typeFilter]);
 
-  const refreshTests = () => setTests(getAllTests());
+  const refreshTests = async () => {
+    const nextTests = await getTeacherTests();
+    setTests(nextTests);
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadPageData() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const [nextClasses, nextTests] = await Promise.all([
+          getTeacherClasses(),
+          getTeacherTests(),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setClasses(nextClasses);
+        setTests(nextTests);
+      } catch (requestError) {
+        setError(requestError.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadPageData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const openCreateModal = () => {
-    setForm(createEmptyForm());
+    setForm({ ...createEmptyForm(), classId: classes[0]?.id || "" });
     setIsModalOpen(true);
   };
 
   const openEditModal = (test) => {
     setForm({
       ...test,
+      classId: test.classId || "",
       questions: test.questions?.length ? test.questions : [createEmptyQuestion()],
     });
     setIsModalOpen(true);
@@ -137,8 +181,10 @@ function TeacherManageTestsPage() {
     }));
   };
 
-  const handleSave = (event) => {
+  const handleSave = async (event) => {
     event.preventDefault();
+    setSaving(true);
+    setError("");
 
     const payload = {
       ...form,
@@ -152,25 +198,39 @@ function TeacherManageTestsPage() {
         : [],
     };
 
-    if (form.id) {
-      updateTest(form.id, payload);
-    } else {
-      createTest(payload);
-    }
+    try {
+      if (!payload.classId) {
+        throw new Error("Avval class tanlang.");
+      }
 
-    refreshTests();
-    setIsModalOpen(false);
+      if (form.id) {
+        await updateTest(form.id, payload);
+      } else {
+        await createTest(payload);
+      }
+
+      await refreshTests();
+      setIsModalOpen(false);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDelete = (testId) => {
+  const handleDelete = async (testId) => {
     const confirmed = window.confirm("Delete this test block? This cannot be undone.");
 
     if (!confirmed) {
       return;
     }
 
-    deleteTest(testId);
-    refreshTests();
+    try {
+      await deleteTest(testId);
+      await refreshTests();
+    } catch (requestError) {
+      setError(requestError.message);
+    }
   };
 
   return (
@@ -189,6 +249,9 @@ function TeacherManageTestsPage() {
           <span>Create new test</span>
         </button>
       </section>
+
+      {loading ? <p className="empty-copy">Loading tests...</p> : null}
+      <ErrorAlert message={error} />
 
       <section className="dashboard-grid dashboard-grid--compact manage-tests-stats">
         <DashboardCard label="All tests" value={tests.length} helper="Stored assessment blocks" />
@@ -323,6 +386,23 @@ function TeacherManageTestsPage() {
               <h3>Assessment identity</h3>
             </div>
             <div className="form-grid">
+              <label>
+                Class
+                <select
+                  value={form.classId}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, classId: event.target.value }))
+                  }
+                  required
+                >
+                  <option value="">Select class</option>
+                  {classes.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 Title
                 <input
@@ -579,9 +659,9 @@ function TeacherManageTestsPage() {
             >
               Cancel
             </button>
-            <button className="primary-button primary-button--with-icon" type="submit">
+            <button className="primary-button primary-button--with-icon" type="submit" disabled={saving}>
               <FaPlus />
-              <span>{form.id ? "Save changes" : "Create test"}</span>
+              <span>{saving ? "Saving..." : form.id ? "Save changes" : "Create test"}</span>
             </button>
           </div>
         </form>

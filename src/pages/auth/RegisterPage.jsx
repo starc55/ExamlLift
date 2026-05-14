@@ -5,7 +5,7 @@ import { getDefaultRouteByRole, ROLES } from "../../constants/roles";
 import { useAuth } from "../../context/AuthContext";
 
 function RegisterPage() {
-  const { currentUser, register } = useAuth();
+  const { authError, currentUser, loading, register } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({
     fullname: "",
@@ -16,19 +16,25 @@ function RegisterPage() {
     specialization: "English teacher",
   });
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (currentUser) {
+  if (!loading && currentUser) {
     return <Navigate to={getDefaultRouteByRole(currentUser.role)} replace />;
   }
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
+    setMessage("");
     setIsSubmitting(true);
 
     try {
       const user = await register(form);
+      if (user.needsEmailConfirmation) {
+        setMessage("Registration saved. Please confirm your email, then log in.");
+        return;
+      }
       navigate(getDefaultRouteByRole(user.role), { replace: true });
     } catch (submitError) {
       setError(submitError.message);
@@ -148,7 +154,9 @@ function RegisterPage() {
               />
             </label>
           )}
+          {authError ? <p className="error-text">{authError}</p> : null}
           {error ? <p className="error-text">{error}</p> : null}
+          {message ? <p className="success-text">{message}</p> : null}
           <button
             className="primary-button"
             type="submit"

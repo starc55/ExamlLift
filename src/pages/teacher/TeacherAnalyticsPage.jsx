@@ -1,9 +1,41 @@
+import { useEffect, useState } from "react";
 import DashboardCard from "../../components/dashboard/DashboardCard";
+import ErrorAlert from "../../components/feedback/ErrorAlert";
 import ProgressBar from "../../components/ProgressBar";
 import { getAllResults } from "../../services/results/resultService";
 
 function TeacherAnalyticsPage() {
-  const results = getAllResults();
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadResults() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const data = await getAllResults();
+
+        if (isMounted) {
+          setResults(data);
+        }
+      } catch (requestError) {
+        setError(requestError.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadResults();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const sectionAverage = (section) => {
     const sectionResults = results.filter((item) => item.section === section);
 
@@ -28,6 +60,9 @@ function TeacherAnalyticsPage() {
         <DashboardCard label="Final average" value={`${sectionAverage("final")}%`} helper="Writing, reading, listening, speaking" tone="success" />
         <DashboardCard label="Total submissions" value={results.length} helper="Local analytics feed" tone="info" />
       </section>
+
+      {loading ? <p className="empty-copy">Loading analytics...</p> : null}
+      <ErrorAlert message={error} />
 
       <section className="card">
         <div className="section-heading">

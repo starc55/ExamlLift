@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import Modal from "../../components/layout/Modal";
 import ResultDetails from "../../components/results/ResultDetails";
+import ErrorAlert from "../../components/feedback/ErrorAlert";
 import { useAuth } from "../../context/AuthContext";
 import { getStudentResults } from "../../services/results/resultService";
 
@@ -18,10 +19,36 @@ function getFeedbackPreview(feedback = "") {
 function StudentResultsPage() {
   const { currentUser } = useAuth();
   const [selectedResult, setSelectedResult] = useState(null);
-  const results = useMemo(
-    () => getStudentResults(currentUser.id),
-    [currentUser.id]
-  );
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadResults() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const data = await getStudentResults(currentUser.id);
+
+        if (isMounted) {
+          setResults(data);
+        }
+      } catch (requestError) {
+        setError(requestError.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadResults();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser.id]);
   const averagePercent = results.length
     ? Math.round(
         results.reduce(
@@ -63,7 +90,10 @@ function StudentResultsPage() {
         </div>
       </section>
 
-      {results.length ? (
+      {loading ? <p className="empty-copy">Loading results...</p> : null}
+      <ErrorAlert message={error} />
+
+      {!loading && results.length ? (
         <section className="result-card-grid">
           {results.map((result) => (
             <article key={result.id} className="card result-card">
@@ -102,12 +132,12 @@ function StudentResultsPage() {
             </article>
           ))}
         </section>
-      ) : (
+      ) : !loading ? (
         <section className="card empty-state">
           <h3>No data yet</h3>
           <p>Results will appear here after you complete a test or homework.</p>
         </section>
-      )}
+      ) : null}
 
       <Modal
         isOpen={Boolean(selectedResult)}

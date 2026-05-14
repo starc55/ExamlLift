@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import ResultTable from "../../components/dashboard/ResultTable";
+import ErrorAlert from "../../components/feedback/ErrorAlert";
 import Modal from "../../components/layout/Modal";
 import ResultDetails from "../../components/results/ResultDetails";
 import { getAllResults } from "../../services/results/resultService";
@@ -11,7 +12,36 @@ function TeacherResultsPage() {
   const [dateFilter, setDateFilter] = useState("");
   const [examTypeFilter, setExamTypeFilter] = useState("all");
   const [selectedResult, setSelectedResult] = useState(null);
-  const results = useMemo(() => getAllResults(), []);
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadResults() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const data = await getAllResults();
+
+        if (isMounted) {
+          setResults(data);
+        }
+      } catch (requestError) {
+        setError(requestError.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadResults();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
   const studentOptions = [...new Set(results.map((result) => result.studentName).filter(Boolean))];
 
   const filteredResults = results.filter((result) => {
@@ -97,6 +127,9 @@ function TeacherResultsPage() {
           <input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} />
         </div>
       </section>
+
+      {loading ? <p className="empty-copy">Loading results...</p> : null}
+      <ErrorAlert message={error} />
 
       <ResultTable results={filteredResults} onViewFeedback={setSelectedResult} />
 

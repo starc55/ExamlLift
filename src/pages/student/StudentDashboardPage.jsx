@@ -1,19 +1,87 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import DashboardCard from "../../components/dashboard/DashboardCard";
+import ErrorAlert from "../../components/feedback/ErrorAlert";
 import ProgressBar from "../../components/ProgressBar";
 import TestCard from "../../components/cards/TestCard";
 import { useAuth } from "../../context/AuthContext";
 import { getAllContent } from "../../services/content/contentService";
 import { getHomeworkSubmissionsByStudent } from "../../services/homework/homeworkService";
 import { getStudentResults } from "../../services/results/resultService";
-import { getAllTests } from "../../services/tests/testService";
+import { getStudentTestsByClass } from "../../services/tests/testService";
+import {
+  getMyClasses,
+  joinClassByCode,
+} from "../../services/classes/studentClassService";
 
 function StudentDashboardPage() {
   const { currentUser } = useAuth();
-  const contentCount = getAllContent().length;
-  const tests = getAllTests();
-  const results = getStudentResults(currentUser.id);
-  const assignments = getHomeworkSubmissionsByStudent(currentUser.id);
+  const [classes, setClasses] = useState([]);
+  const [contentCount, setContentCount] = useState(0);
+  const [tests, setTests] = useState([]);
+  const [results, setResults] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [inviteCode, setInviteCode] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [joining, setJoining] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  const loadDashboard = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const nextClasses = await getMyClasses();
+      const defaultClassId = nextClasses[0]?.id || null;
+      const [nextContent, nextTests, nextResults, nextAssignments] =
+        await Promise.all([
+          getAllContent(),
+          getStudentTestsByClass(defaultClassId),
+          getStudentResults(currentUser.id),
+          getHomeworkSubmissionsByStudent(currentUser.id),
+        ]);
+
+      setClasses(nextClasses);
+      setContentCount(nextContent.length);
+      setTests(nextTests);
+      setResults(nextResults);
+      setAssignments(nextAssignments);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDashboard();
+  }, [currentUser.id]);
+
+  const handleJoinClass = async (event) => {
+    event.preventDefault();
+
+    if (!inviteCode.trim()) {
+      setError("Invite code kiriting.");
+      return;
+    }
+
+    setJoining(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const joinedClass = await joinClassByCode(inviteCode);
+      setMessage(`${joinedClass.title} classiga qo'shildingiz.`);
+      setInviteCode("");
+      await loadDashboard();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setJoining(false);
+    }
+  };
+
   const averageScore = results.length
     ? Math.round(
         results.reduce((total, item) => total + (item.percentage || item.percent), 0) /
@@ -37,16 +105,16 @@ function StudentDashboardPage() {
             {currentUser.fullname}, every learning block is ready in order
           </h3>
           <p className="hero-card__description">
-            Review content, submit homework, complete the midterm and final step
-            by step, and track all results from one place.
+            Review class content, submit homework, complete assessments, and track
+            all results from one place.
           </p>
           <div className="hero-card__actions">
             <Link to="/student/content" className="primary-button">
               Open content
             </Link>
-          <Link to="/student/results" className="secondary-button">
+            <Link to="/student/results" className="secondary-button">
               View results
-          </Link>
+            </Link>
             <Link to="/student/homework" className="secondary-button">
               Homework center
             </Link>
@@ -54,9 +122,9 @@ function StudentDashboardPage() {
         </div>
         <div className="hero-card__stats">
           <DashboardCard
-            label="Content modules"
-            value={contentCount}
-            helper="Topic and media lessons"
+            label="Classes"
+            value={classes.length}
+            helper="Joined with invite code"
           />
           <DashboardCard
             label="Homework"
@@ -73,6 +141,30 @@ function StudentDashboardPage() {
         </div>
       </section>
 
+      <TestCard
+        title="Join Class"
+        description="Enter your teacher's invite code to unlock class content, tests, and homework."
+        stats="IELTS-XXXXX"
+      >
+        <form className="assignment-form" onSubmit={handleJoinClass}>
+          <label>
+            Invite code
+            <input
+              value={inviteCode}
+              onChange={(event) => setInviteCode(event.target.value.toUpperCase())}
+              placeholder="IELTS-A23K7"
+            />
+          </label>
+          <button className="primary-button" type="submit" disabled={joining}>
+            {joining ? "Joining..." : "Join class"}
+          </button>
+        </form>
+        {message ? <p className="success-text">{message}</p> : null}
+        <ErrorAlert message={error} />
+      </TestCard>
+
+      {loading ? <p className="empty-copy">Loading dashboard...</p> : null}
+
       <section className="dashboard-grid dashboard-grid--compact">
         <DashboardCard
           label="Submitted homework"
@@ -83,30 +175,30 @@ function StudentDashboardPage() {
         <DashboardCard
           label="Available tests"
           value={tests.length}
-          helper="Midterm and final sections"
+          helper="Class assessment blocks"
           tone="info"
         />
         <DashboardCard
           label="Saved attempts"
           value={results.length}
-          helper="Every finished section is stored"
+          helper="Every finished exam is stored"
         />
       </section>
 
       <section className="dashboard-grid dashboard-grid--features">
         <TestCard
           title="Content journey"
-          description="Compact topic list, rich notes, audio, PDF, and assignment upload."
+          description="Class topic list, notes, audio, PDF, and media resources."
           stats={`${contentCount} lessons`}
         >
-          <ProgressBar label="Library readiness" value={100} />
+          <ProgressBar label="Library readiness" value={classes.length ? 100 : 0} />
           <Link to="/student/content" className="primary-button card-link">
             Browse lessons
           </Link>
         </TestCard>
         <TestCard
           title="Midterm Control"
-          description="Intro screen, start button, and sequential sections."
+          description="Vocabulary, grammar, and speaking in a grouped result."
           stats="Step by step"
         >
           <ProgressBar label="Assessment coverage" value={78} />
@@ -130,9 +222,6 @@ function StudentDashboardPage() {
           stats={`${submittedHomework} submitted`}
         >
           <ProgressBar label="Homework score average" value={averageHomework} />
-          <Link to="/student/content" className="secondary-button card-link">
-            Open lessons
-          </Link>
           <Link to="/student/homework" className="primary-button card-link">
             Send homework
           </Link>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import AIStatusLoader from "../../components/feedback/AIStatusLoader";
 import CriteriaBreakdown from "../../components/feedback/CriteriaBreakdown";
@@ -30,6 +30,7 @@ import {
   saveGroupedExamResult,
   saveTempExamSection,
 } from "../../services/results/resultService";
+import { getDefaultStudentClassId } from "../../services/classes/studentClassService";
 import { getTestByType } from "../../services/tests/testService";
 import {
   areAllQuestionsAnswered,
@@ -40,30 +41,38 @@ import {
 
 function StudentMidtermPage() {
   const { currentUser } = useAuth();
-  const vocabularyTest = getTestByType("vocabulary", "midterm");
-  const grammarTest = getTestByType("grammar", "midterm");
-  const speakingTest = getTestByType("speaking", "midterm");
-  const vocabularyData = vocabularyTest.matchingData || vocabularyMatchingData;
+  const [classId, setClassId] = useState(null);
+  const [tests, setTests] = useState({
+    vocabulary: null,
+    grammar: null,
+    speaking: null,
+  });
+  const [testsLoading, setTestsLoading] = useState(true);
+  const [testsError, setTestsError] = useState("");
+  const vocabularyTest = tests.vocabulary;
+  const grammarTest = tests.grammar;
+  const speakingTest = tests.speaking;
+  const vocabularyData = vocabularyTest?.matchingData || vocabularyMatchingData;
 
   const steps = useMemo(
     () => [
       {
         key: "vocabulary",
         title: "Vocabulary",
-        description: vocabularyTest.instructions,
-        duration: vocabularyTest.durationMinutes,
+        description: vocabularyTest?.instructions || "",
+        duration: vocabularyTest?.durationMinutes || 0,
       },
       {
         key: "grammar",
         title: "Grammar",
-        description: grammarTest.instructions,
-        duration: grammarTest.durationMinutes,
+        description: grammarTest?.instructions || "",
+        duration: grammarTest?.durationMinutes || 0,
       },
       {
         key: "speaking",
         title: "Speaking",
-        description: speakingTest.instructions,
-        duration: speakingTest.durationMinutes,
+        description: speakingTest?.instructions || "",
+        duration: speakingTest?.durationMinutes || 0,
       },
     ],
     [grammarTest, speakingTest, vocabularyTest]
@@ -89,6 +98,45 @@ function StudentMidtermPage() {
   const [grammarError, setGrammarError] = useState("");
   const [speakingError, setSpeakingError] = useState("");
   const [overallError, setOverallError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadTests() {
+      setTestsLoading(true);
+      setTestsError("");
+
+      try {
+        const nextClassId = await getDefaultStudentClassId();
+        const [nextVocabulary, nextGrammar, nextSpeaking] = await Promise.all([
+          getTestByType("vocabulary", "midterm", nextClassId),
+          getTestByType("grammar", "midterm", nextClassId),
+          getTestByType("speaking", "midterm", nextClassId),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setClassId(nextClassId);
+        setTests({
+          vocabulary: nextVocabulary,
+          grammar: nextGrammar,
+          speaking: nextSpeaking,
+        });
+      } catch (requestError) {
+        setTestsError(requestError.message);
+      } finally {
+        setTestsLoading(false);
+      }
+    }
+
+    loadTests();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const completionPercent = Math.round((completedSteps.length / steps.length) * 100);
 
@@ -116,6 +164,7 @@ function StudentMidtermPage() {
     const draftResult = createGroupedExamResult({
       studentId: currentUser.id,
       studentName: currentUser.fullname,
+      classId,
       examType: "midterm",
       title: "Midterm Control Result",
       sections,
@@ -151,9 +200,10 @@ function StudentMidtermPage() {
       });
     }
 
-    const saved = saveGroupedExamResult({
+    const saved = await saveGroupedExamResult({
       studentId: currentUser.id,
       studentName: currentUser.fullname,
+      classId,
       examType: "midterm",
       title: "Midterm Control Result",
       sections,
@@ -167,6 +217,11 @@ function StudentMidtermPage() {
   };
 
   const handleVocabularySubmit = async () => {
+    if (!vocabularyTest) {
+      setVocabularyError("Vocabulary test topilmadi.");
+      return;
+    }
+
     if (!areAllVocabularyAnswersSelected(vocabularyData.words, vocabularyAnswers)) {
       setVocabularyError("Barcha vocabulary juftliklarini tanlang.");
       return;
@@ -218,6 +273,11 @@ function StudentMidtermPage() {
   };
 
   const handleGrammarSubmit = async () => {
+    if (!grammarTest) {
+      setGrammarError("Grammar test topilmadi.");
+      return;
+    }
+
     if (!areAllQuestionsAnswered(grammarTest.questions, grammarAnswers)) {
       setGrammarError("Barcha grammar savollariga javob bering.");
       return;
@@ -229,6 +289,10 @@ function StudentMidtermPage() {
     setGrammarError("");
 
     try {
+      if (!speakingTest) {
+        throw new Error("Speaking test topilmadi.");
+      }
+
       const assessment = await getTestFeedback({
         section: "grammar",
         feedbackLanguage,
@@ -313,9 +377,19 @@ function StudentMidtermPage() {
     </article>
   );
 
+  const testsReady = Boolean(vocabularyTest && grammarTest && speakingTest);
+
   return (
     <div className="page-stack">
-      {!hasStarted ? (
+      {testsLoading ? <p className="empty-copy">Loading midterm tests...</p> : null}
+      <ErrorAlert message={testsError} />
+      {!testsLoading && (!vocabularyTest || !grammarTest || !speakingTest) ? (
+        <section className="card empty-state">
+          <h3>Midterm tests are not ready</h3>
+          <p>Your teacher can create class tests in Manage Tests.</p>
+        </section>
+      ) : null}
+      {testsReady && !hasStarted ? (
         <section className="card exam-intro">
           <div>
             <p className="eyebrow">Midterm control</p>
@@ -335,7 +409,9 @@ function StudentMidtermPage() {
             Start midterm
           </button>
         </section>
-      ) : (
+      ) : null}
+
+      {testsReady && hasStarted ? (
         <>
           <section className="section-heading section-heading--with-tools">
             <div>
@@ -509,7 +585,7 @@ function StudentMidtermPage() {
             </section>
           ) : null}
         </>
-      )}
+      ) : null}
     </div>
   );
 }

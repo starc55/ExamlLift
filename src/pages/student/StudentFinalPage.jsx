@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import AudioPlayer from "../../components/audio/AudioPlayer";
 import AIStatusLoader from "../../components/feedback/AIStatusLoader";
@@ -30,37 +30,47 @@ import {
   saveGroupedExamResult,
   saveTempExamSection,
 } from "../../services/results/resultService";
+import { getDefaultStudentClassId } from "../../services/classes/studentClassService";
 import { getTestByType } from "../../services/tests/testService";
 import { areAllQuestionsAnswered, scoreMcqTest } from "../../utils/testHelpers";
 
 function StudentFinalPage() {
   const { currentUser } = useAuth();
-  const writingTest = getTestByType("writing", "final");
-  const speakingTest = getTestByType("speaking", "final");
-  const listeningTest = getTestByType("listening", "final");
-  const readingTest = getTestByType("reading", "final");
+  const [classId, setClassId] = useState(null);
+  const [tests, setTests] = useState({
+    writing: null,
+    speaking: null,
+    listening: null,
+    reading: null,
+  });
+  const [testsLoading, setTestsLoading] = useState(true);
+  const [testsError, setTestsError] = useState("");
+  const writingTest = tests.writing;
+  const speakingTest = tests.speaking;
+  const listeningTest = tests.listening;
+  const readingTest = tests.reading;
 
   const steps = useMemo(
     () => [
       {
         key: "writing",
-        title: writingTest.title,
-        description: writingTest.instructions,
+        title: writingTest?.title || "Writing",
+        description: writingTest?.instructions || "",
       },
       {
         key: "speaking",
-        title: speakingTest.title,
-        description: speakingTest.instructions,
+        title: speakingTest?.title || "Speaking",
+        description: speakingTest?.instructions || "",
       },
       {
         key: "listening",
-        title: listeningTest.title,
-        description: listeningTest.instructions,
+        title: listeningTest?.title || "Listening",
+        description: listeningTest?.instructions || "",
       },
       {
         key: "reading",
-        title: readingTest.title,
-        description: readingTest.instructions,
+        title: readingTest?.title || "Reading",
+        description: readingTest?.instructions || "",
       },
     ],
     [listeningTest, readingTest, speakingTest, writingTest]
@@ -92,6 +102,48 @@ function StudentFinalPage() {
   const [overallError, setOverallError] = useState("");
   const [writingWarning, setWritingWarning] = useState("");
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadTests() {
+      setTestsLoading(true);
+      setTestsError("");
+
+      try {
+        const nextClassId = await getDefaultStudentClassId();
+        const [nextWriting, nextSpeaking, nextListening, nextReading] =
+          await Promise.all([
+            getTestByType("writing", "final", nextClassId),
+            getTestByType("speaking", "final", nextClassId),
+            getTestByType("listening", "final", nextClassId),
+            getTestByType("reading", "final", nextClassId),
+          ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setClassId(nextClassId);
+        setTests({
+          writing: nextWriting,
+          speaking: nextSpeaking,
+          listening: nextListening,
+          reading: nextReading,
+        });
+      } catch (requestError) {
+        setTestsError(requestError.message);
+      } finally {
+        setTestsLoading(false);
+      }
+    }
+
+    loadTests();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const completionPercent = Math.round((completedSteps.length / steps.length) * 100);
 
   const markStepComplete = (stepKey) => {
@@ -118,6 +170,7 @@ function StudentFinalPage() {
     const draftResult = createGroupedExamResult({
       studentId: currentUser.id,
       studentName: currentUser.fullname,
+      classId,
       examType: "final",
       title: "Final Exam Result",
       sections,
@@ -153,9 +206,10 @@ function StudentFinalPage() {
       });
     }
 
-    const saved = saveGroupedExamResult({
+    const saved = await saveGroupedExamResult({
       studentId: currentUser.id,
       studentName: currentUser.fullname,
+      classId,
       examType: "final",
       title: "Final Exam Result",
       sections,
@@ -169,6 +223,11 @@ function StudentFinalPage() {
   };
 
   const handleWritingReview = async () => {
+    if (!writingTest) {
+      setWritingError("Writing test topilmadi.");
+      return;
+    }
+
     const trimmedText = writingText.trim();
 
     if (!trimmedText) {
@@ -188,6 +247,10 @@ function StudentFinalPage() {
     setWritingError("");
 
     try {
+      if (!speakingTest) {
+        throw new Error("Speaking test topilmadi.");
+      }
+
       const assessment = await getWritingFeedback({
         feedbackLanguage,
         taskTitle: writingTest.taskTitle || writingTest.title,
@@ -261,6 +324,11 @@ function StudentFinalPage() {
   };
 
   const handleListeningSubmit = async () => {
+    if (!listeningTest) {
+      setListeningError("Listening test topilmadi.");
+      return;
+    }
+
     if (!areAllQuestionsAnswered(listeningTest.questions, listeningAnswers)) {
       setListeningError("Barcha listening savollariga javob bering.");
       return;
@@ -310,6 +378,11 @@ function StudentFinalPage() {
   };
 
   const handleReadingSubmit = async () => {
+    if (!readingTest) {
+      setReadingError("Reading test topilmadi.");
+      return;
+    }
+
     if (!areAllQuestionsAnswered(readingTest.questions, readingAnswers)) {
       setReadingError("Barcha reading savollariga javob bering.");
       return;
@@ -367,9 +440,20 @@ function StudentFinalPage() {
     </article>
   );
 
+  const testsReady = Boolean(writingTest && speakingTest && listeningTest && readingTest);
+
   return (
     <div className="page-stack">
-      {!hasStarted ? (
+      {testsLoading ? <p className="empty-copy">Loading final tests...</p> : null}
+      <ErrorAlert message={testsError} />
+      {!testsLoading && !testsReady ? (
+        <section className="card empty-state">
+          <h3>Final tests are not ready</h3>
+          <p>Your teacher can create class tests in Manage Tests.</p>
+        </section>
+      ) : null}
+
+      {testsReady && !hasStarted ? (
         <section className="card exam-intro">
           <div>
             <p className="eyebrow">Final control</p>
@@ -389,7 +473,9 @@ function StudentFinalPage() {
             Start final control
           </button>
         </section>
-      ) : (
+      ) : null}
+
+      {testsReady && hasStarted ? (
         <>
           <section className="section-heading section-heading--with-tools">
             <div>
@@ -625,7 +711,7 @@ function StudentFinalPage() {
             </section>
           ) : null}
         </>
-      )}
+      ) : null}
     </div>
   );
 }

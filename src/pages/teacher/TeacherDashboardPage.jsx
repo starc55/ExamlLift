@@ -1,20 +1,63 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import DashboardCard from "../../components/dashboard/DashboardCard";
+import ErrorAlert from "../../components/feedback/ErrorAlert";
 import TestCard from "../../components/cards/TestCard";
-import { useAuth } from "../../context/AuthContext";
+import { getTeacherClasses } from "../../services/classes/classService";
 import { getAllContent } from "../../services/content/contentService";
 import { getAllHomeworkSubmissions } from "../../services/homework/homeworkService";
 import { getAllResults } from "../../services/results/resultService";
-import { getAllTests } from "../../services/tests/testService";
+import { getTeacherTests } from "../../services/tests/testService";
 
 function TeacherDashboardPage() {
-  const { currentUser } = useAuth();
-  const contentCount = getAllContent().length;
-  const tests = getAllTests();
-  const results = getAllResults();
-  const assignments = getAllHomeworkSubmissions().filter(
-    (submission) => submission.teacherId === currentUser.id
-  );
+  const [classes, setClasses] = useState([]);
+  const [contentCount, setContentCount] = useState(0);
+  const [tests, setTests] = useState([]);
+  const [results, setResults] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDashboard() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const [nextClasses, nextContent, nextTests, nextResults, nextAssignments] =
+          await Promise.all([
+            getTeacherClasses(),
+            getAllContent(),
+            getTeacherTests(),
+            getAllResults(),
+            getAllHomeworkSubmissions(),
+          ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setClasses(nextClasses);
+        setContentCount(nextContent.length);
+        setTests(nextTests);
+        setResults(nextResults);
+        setAssignments(nextAssignments);
+      } catch (requestError) {
+        setError(requestError.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadDashboard();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const averagePercent = results.length
     ? Math.round(
         results.reduce((total, item) => total + (item.percentage || item.percent), 0) /
@@ -30,41 +73,53 @@ function TeacherDashboardPage() {
       <section className="hero-card hero-card--blue">
         <div>
           <p className="eyebrow">Teacher workspace</p>
-          <h3>Content, tasks, tests, and results in one compact teacher panel</h3>
+          <h3>Classes, content, tasks, tests, and results in one teacher panel</h3>
           <p>
-            Use the teacher panel to upload lessons, create homework,
-            manage tests, and review performance results.
+            Create invite-code classes, upload lessons, create homework, manage
+            tests, and review performance results.
           </p>
           <div className="hero-card__actions">
-            <Link to="/teacher/upload-content" className="primary-button">
+            <Link to="/teacher/classes" className="primary-button">
+              Manage classes
+            </Link>
+            <Link to="/teacher/upload-content" className="secondary-button">
               Upload lesson
             </Link>
             <Link to="/teacher/results" className="secondary-button">
               Open results
             </Link>
-            <Link to="/teacher/homework" className="secondary-button">
-              Homework
-            </Link>
           </div>
         </div>
         <div className="hero-card__stats">
-          <DashboardCard label="Content items" value={contentCount} helper="Seed + uploaded lessons" />
-          <DashboardCard label="Managed tests" value={tests.length} helper="All assessment blocks" tone="info" />
+          <DashboardCard label="Classes" value={classes.length} helper="Invite-code groups" />
+          <DashboardCard label="Content items" value={contentCount} helper="Published lessons" tone="info" />
           <DashboardCard label="Average score" value={`${averagePercent}%`} helper="Across saved attempts" tone="success" />
         </div>
       </section>
 
+      {loading ? <p className="empty-copy">Loading teacher dashboard...</p> : null}
+      <ErrorAlert message={error} />
+
       <section className="dashboard-grid dashboard-grid--compact">
         <DashboardCard label="Review queue" value={pendingAssignments.length} helper="Submitted homework to inspect" tone="info" />
         <DashboardCard label="Homework total" value={assignments.length} helper="All homework submissions" tone="success" />
-        <DashboardCard label="Saved results" value={results.length} helper="Student submissions in storage" />
+        <DashboardCard label="Managed tests" value={tests.length} helper="Class assessment blocks" />
       </section>
 
       <section className="dashboard-grid dashboard-grid--features">
         <TestCard
+          title="Class management"
+          description="Create classes and share invite codes with students."
+          stats={`${classes.length} classes`}
+        >
+          <Link to="/teacher/classes" className="primary-button card-link">
+            Open classes
+          </Link>
+        </TestCard>
+        <TestCard
           title="Upload pipeline"
-          description="Lesson metadata, assignment brief, media and compact preview cards."
-          stats="Content + task flow"
+          description="Lesson metadata, media files, and class-scoped publishing."
+          stats="Supabase Storage"
         >
           <Link to="/teacher/upload-content" className="primary-button card-link">
             Open upload
@@ -72,8 +127,8 @@ function TeacherDashboardPage() {
         </TestCard>
         <TestCard
           title="Test management"
-          description="A compact CRUD workspace for midterm and final sections."
-          stats="Responsive builder"
+          description="CRUD workspace for class midterm, final, and practice tests."
+          stats="Database builder"
         >
           <Link to="/teacher/manage-tests" className="secondary-button card-link">
             Manage tests
@@ -81,7 +136,7 @@ function TeacherDashboardPage() {
         </TestCard>
         <TestCard
           title="Homework review"
-          description="Inspect AI feedback, transcripts, and wrong answers from student homework."
+          description="Inspect AI feedback, transcripts, and student homework files."
           stats={`${pendingAssignments.length} pending`}
         >
           <Link to="/teacher/homework/submissions" className="secondary-button card-link">

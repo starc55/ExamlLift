@@ -1,18 +1,52 @@
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import AudioPlayer from "../../components/audio/AudioPlayer";
+import ErrorAlert from "../../components/feedback/ErrorAlert";
 import PDFViewer from "../../components/pdf/PDFViewer";
-import { getAllContent } from "../../services/content/contentService";
+import { getContentById } from "../../services/content/contentService";
 
 function StudentContentDetailPage() {
   const { id } = useParams();
-  const contentItems = useMemo(() => getAllContent(), []);
-  const selectedContent = contentItems.find((item) => item.id === id) || null;
+  const [selectedContent, setSelectedContent] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadContent() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const data = await getContentById(id);
+
+        if (isMounted) {
+          setSelectedContent(data);
+        }
+      } catch (requestError) {
+        setError(requestError.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadContent();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  if (loading) {
+    return <p className="empty-copy">Loading content...</p>;
+  }
 
   if (!selectedContent) {
     return (
       <section className="card empty-state">
         <h3>Content not found</h3>
+        <ErrorAlert message={error} />
         <Link to="/student/content" className="primary-button card-link">
           Back to content
         </Link>
@@ -60,7 +94,7 @@ function StudentContentDetailPage() {
             title={`${selectedContent.title} audio`}
           />
           <PDFViewer
-            src={selectedContent.pdfUrl}
+            src={selectedContent.pdfUrl || selectedContent.fileUrl}
             title={`${selectedContent.title} PDF`}
           />
         </div>
@@ -71,14 +105,9 @@ function StudentContentDetailPage() {
               <p className="eyebrow">Homework workflow</p>
               <h3>{selectedContent.assignmentTitle || "Homework task"}</h3>
             </div>
-            <span className="pill pill--soft">Moved to Homework Center</span>
+            <span className="pill pill--soft">Homework Center</span>
           </div>
           <p>{selectedContent.assignmentInstructions}</p>
-          <p>
-            Bu lesson uchun topshiriqlar endi alohida homework markazida boshqariladi.
-            U yerda AI feedback, audio transcription, local checking va submission
-            history bir joyda ko'rsatiladi.
-          </p>
           <div className="card-actions">
             <Link to="/student/homework" className="primary-button card-link">
               Open homework center

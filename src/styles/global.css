@@ -1510,6 +1510,146 @@ pre {
 }
 
 /* ===== TeacherUploadContentPage And StudentContentDetailPage File Inputs ===== */
+.class-publish-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+  gap: 20px;
+  align-items: center;
+  padding: 24px;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(202, 162, 77, 0.34);
+  background:
+    linear-gradient(135deg, rgba(255, 252, 248, 0.98), rgba(246, 232, 221, 0.96));
+  box-shadow: var(--shadow);
+}
+
+.class-publish-panel__summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  min-width: 0;
+}
+
+.class-publish-panel__icon {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  color: #fff4d0;
+  background: linear-gradient(135deg, var(--primary), var(--primary-soft));
+  box-shadow: 0 14px 28px rgba(77, 12, 22, 0.16);
+}
+
+.class-publish-panel__icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.class-publish-panel h2 {
+  margin: 0;
+  color: var(--primary-dark);
+  font-size: clamp(1.25rem, 2vw, 1.75rem);
+}
+
+.class-publish-panel p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.class-select-shell {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.class-select-shell label {
+  color: var(--accent-deep);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.class-select-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 58px;
+  border-radius: 18px;
+  border: 1px solid rgba(202, 162, 77, 0.38);
+  background: rgba(255, 252, 248, 0.96);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.class-select-control:focus-within {
+  border-color: rgba(111, 18, 33, 0.52);
+  box-shadow:
+    0 0 0 4px rgba(202, 162, 77, 0.16),
+    0 14px 30px rgba(77, 12, 22, 0.1);
+  transform: translateY(-1px);
+}
+
+.class-select-control select {
+  width: 100%;
+  min-height: 56px;
+  padding: 14px 48px 14px 48px;
+  border: 0;
+  outline: none;
+  appearance: none;
+  color: var(--primary-dark);
+  background: transparent;
+  font-weight: 800;
+}
+
+.class-select-control__leading,
+.class-select-control__chevron {
+  position: absolute;
+  pointer-events: none;
+  color: var(--accent-deep);
+}
+
+.class-select-control__leading {
+  left: 18px;
+}
+
+.class-select-control__chevron {
+  right: 18px;
+}
+
+.class-publish-panel__meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.class-publish-panel__meta span,
+.class-publish-panel__empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(202, 162, 77, 0.24);
+  background: rgba(202, 162, 77, 0.12);
+  color: var(--primary-dark);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.class-publish-panel__empty {
+  grid-column: 1 / -1;
+  margin-top: -4px;
+  border-color: rgba(179, 38, 30, 0.18);
+  background: rgba(179, 38, 30, 0.08);
+  color: var(--danger);
+}
+
 .upload-form {
   padding: 24px;
 }
@@ -1967,7 +2107,8 @@ pre {
   }
 
   .manage-tests-hero,
-  .manage-tests-toolbar {
+  .manage-tests-toolbar,
+  .class-publish-panel {
     grid-template-columns: 1fr;
   }
 
@@ -2105,6 +2246,15 @@ pre {
   .file-field__row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .class-publish-panel__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .class-publish-panel__icon {
+    width: 48px;
+    height: 48px;
   }
 
   .file-field__trigger,

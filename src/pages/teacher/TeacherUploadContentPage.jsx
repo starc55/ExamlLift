@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { FaChalkboardUser, FaChevronDown, FaLayerGroup, FaUsers } from "react-icons/fa6";
 import { Link } from "react-router-dom";
 import UploadForm from "../../components/content/UploadForm";
 import ContentCard from "../../components/content/ContentCard";
@@ -129,27 +130,59 @@ function TeacherUploadContentPage() {
     }));
   };
 
+  const selectedClass = classes.find((item) => item.id === form.classId) || null;
+
   return (
     <div className="page-stack">
-      <section className="card">
-        <label>
-          Class
-          <select
-            value={form.classId}
-            onChange={(event) =>
-              setForm((current) => ({ ...current, classId: event.target.value }))
-            }
-          >
-            <option value="">Select class</option>
-            {classes.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.title}
-              </option>
-            ))}
-          </select>
-        </label>
+      <section className="class-publish-panel">
+        <div className="class-publish-panel__summary">
+          <span className="class-publish-panel__icon">
+            <FaChalkboardUser />
+          </span>
+          <div>
+            <p className="eyebrow">Publish target</p>
+            <h2>{selectedClass?.title || "Choose a class"}</h2>
+            <p>
+              {selectedClass?.description ||
+                "Select which class will receive this lesson."}
+            </p>
+          </div>
+        </div>
+
+        <div className="class-select-shell">
+          <label htmlFor="content-class-select">Class</label>
+          <div className="class-select-control">
+            <FaLayerGroup className="class-select-control__leading" />
+            <select
+              id="content-class-select"
+              value={form.classId}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  classId: event.target.value,
+                }))
+              }
+            >
+              <option value="">Select class</option>
+              {classes.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+            <FaChevronDown className="class-select-control__chevron" />
+          </div>
+          <div className="class-publish-panel__meta">
+            <span>
+              <FaUsers />
+              {selectedClass?.studentCount || 0} students
+            </span>
+            <span>{selectedClass?.inviteCode || "No invite code selected"}</span>
+          </div>
+        </div>
+
         {!classes.length && !loading ? (
-          <p className="empty-copy">
+          <p className="class-publish-panel__empty">
             Create a class before uploading content.
             <Link to="/teacher/classes" className="text-link"> Open classes</Link>
           </p>

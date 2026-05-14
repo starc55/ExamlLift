@@ -93,8 +93,9 @@ async function getCurrentUserId() {
   return data.user?.id;
 }
 
-export async function uploadHomeworkFile(file, folder = "homework") {
-  return uploadContentFile(file, folder);
+export async function uploadHomeworkFile(file) {
+  const userId = await getCurrentUserId();
+  return uploadContentFile(file, userId);
 }
 
 export async function getAllHomework() {

@@ -43,6 +43,11 @@ const initialForm = {
   },
 };
 
+const DESCRIPTION_MAX_CHARS = 1000;
+const LESSON_NOTES_MAX_CHARS = 10000;
+const ASSIGNMENT_TITLE_MAX_CHARS = 200;
+const ASSIGNMENT_BRIEF_MAX_CHARS = 2000;
+
 function TeacherUploadContentPage() {
   const { currentUser } = useAuth();
   const submitLockRef = useRef(false);
@@ -547,6 +552,7 @@ function TeacherUploadContentPage() {
             <textarea
               rows={4}
               value={editForm.description}
+              maxLength={DESCRIPTION_MAX_CHARS}
               onChange={(event) =>
                 setEditForm((current) => ({ ...current, description: event.target.value }))
               }
@@ -558,6 +564,7 @@ function TeacherUploadContentPage() {
             <textarea
               rows={7}
               value={editForm.lessonNotes}
+              maxLength={LESSON_NOTES_MAX_CHARS}
               onChange={(event) =>
                 setEditForm((current) => ({ ...current, lessonNotes: event.target.value }))
               }
@@ -568,6 +575,7 @@ function TeacherUploadContentPage() {
               Assignment title
               <input
                 value={editForm.assignmentTitle}
+                maxLength={ASSIGNMENT_TITLE_MAX_CHARS}
                 onChange={(event) =>
                   setEditForm((current) => ({ ...current, assignmentTitle: event.target.value }))
                 }
@@ -578,6 +586,7 @@ function TeacherUploadContentPage() {
               <textarea
                 rows={4}
                 value={editForm.assignmentInstructions}
+                maxLength={ASSIGNMENT_BRIEF_MAX_CHARS}
                 onChange={(event) =>
                   setEditForm((current) => ({
                     ...current,

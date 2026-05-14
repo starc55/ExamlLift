@@ -6,6 +6,12 @@ const PDF_MAX_BYTES = 10 * 1024 * 1024;
 const AUDIO_MAX_BYTES = 20 * 1024 * 1024;
 const IMAGE_MAX_DIMENSION = 1600;
 const IMAGE_QUALITY = 0.82;
+const DESCRIPTION_MAX_CHARS = 1000;
+const TEXT_CONTENT_MAX_CHARS = 10000;
+const SECTION_BODY_MAX_CHARS = 1800;
+const MAX_METADATA_SECTIONS = 5;
+const ASSIGNMENT_TITLE_MAX_CHARS = 200;
+const ASSIGNMENT_INSTRUCTIONS_MAX_CHARS = 2000;
 
 const SUPPORTED_TYPES = {
   image: ["image/jpeg", "image/png", "image/webp"],
@@ -34,7 +40,11 @@ function parseContentMetadata(textContent) {
 
 function inferContentType(payload) {
   if (payload.contentType) {
-    return payload.contentType;
+    return normalizeContentType(payload.contentType);
+  }
+
+  if (payload.content_type) {
+    return normalizeContentType(payload.content_type);
   }
 
   if (payload.pdfUrl) return "pdf";
@@ -43,7 +53,87 @@ function inferContentType(payload) {
   return "text";
 }
 
+function normalizeContentType(contentType = "text") {
+  const value = String(contentType).toLowerCase();
+
+  if (value === "application/pdf" || value.includes("pdf")) return "pdf";
+  if (value.startsWith("image/") || value === "image") return "image";
+  if (value.startsWith("audio/") || value === "audio") return "audio";
+  if (value.startsWith("video/") || value === "video") return "video";
+  if (value === "text" || value === "text/plain") return "text";
+
+  return "text";
+}
+
+function trimToLimit(value, maxChars) {
+  return String(value || "").trim().slice(0, maxChars);
+}
+
+function normalizeMetadataSections(payload, hasPdf) {
+  const sourceSections = Array.isArray(payload.sections) ? payload.sections : [];
+  const fallbackText = trimToLimit(
+    payload.lessonNotes || (!hasPdf ? payload.description : ""),
+    SECTION_BODY_MAX_CHARS
+  );
+  const sections = sourceSections.length
+    ? sourceSections
+    : fallbackText
+      ? [{ heading: "Lesson overview", body: fallbackText }]
+      : [];
+
+  return sections
+    .slice(0, MAX_METADATA_SECTIONS)
+    .map((section, index) => ({
+      heading: trimToLimit(
+        section.heading || `Lesson block ${index + 1}`,
+        120
+      ),
+      body: trimToLimit(section.body || "", SECTION_BODY_MAX_CHARS),
+    }))
+    .filter((section) => section.heading || section.body);
+}
+
+function serializeContentMetadata(metadata) {
+  const serialized = JSON.stringify(metadata);
+
+  if (serialized.length <= TEXT_CONTENT_MAX_CHARS) {
+    return serialized;
+  }
+
+  const compactMetadata = {
+    ...metadata,
+    sections: (metadata.sections || []).map((section) => ({
+      heading: trimToLimit(section.heading, 120),
+      body: trimToLimit(section.body, 700),
+    })),
+    assignmentInstructions: trimToLimit(metadata.assignmentInstructions, 1000),
+  };
+  const compactSerialized = JSON.stringify(compactMetadata);
+
+  if (compactSerialized.length <= TEXT_CONTENT_MAX_CHARS) {
+    return compactSerialized;
+  }
+
+  return JSON.stringify({
+    category: compactMetadata.category,
+    level: compactMetadata.level,
+    duration: compactMetadata.duration,
+    imageUrl: compactMetadata.imageUrl,
+    audioUrl: compactMetadata.audioUrl,
+    pdfUrl: compactMetadata.pdfUrl,
+    videoUrl: compactMetadata.videoUrl,
+    sections: [],
+    assignmentTitle: trimToLimit(compactMetadata.assignmentTitle, 160),
+    assignmentInstructions: trimToLimit(
+      compactMetadata.assignmentInstructions,
+      500
+    ),
+  });
+}
+
 function buildContentMetadata(payload) {
+  const hasPdf = Boolean(payload.pdfUrl || inferContentType(payload) === "pdf");
+
   return {
     category: payload.category || "General English",
     level: payload.level || "Intermediate",
@@ -52,19 +142,16 @@ function buildContentMetadata(payload) {
     audioUrl: payload.audioUrl || "",
     pdfUrl: payload.pdfUrl || "",
     videoUrl: payload.videoUrl || "",
-    sections: payload.sections?.length
-      ? payload.sections
-      : [
-          {
-            heading: "Lesson overview",
-            body: payload.lessonNotes || payload.description || "",
-          },
-        ],
-    assignmentTitle:
+    sections: normalizeMetadataSections(payload, hasPdf),
+    assignmentTitle: trimToLimit(
       payload.assignmentTitle || `${payload.title} follow-up task`,
-    assignmentInstructions:
+      ASSIGNMENT_TITLE_MAX_CHARS
+    ),
+    assignmentInstructions: trimToLimit(
       payload.assignmentInstructions ||
-      "Upload your completed task or reflection for teacher review.",
+        "Upload your completed task or reflection for teacher review.",
+      ASSIGNMENT_INSTRUCTIONS_MAX_CHARS
+    ),
   };
 }
 
@@ -126,6 +213,19 @@ function safeFileName(fileName) {
 
 function formatMb(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+function getDebugFileInfo(file) {
+  return {
+    name: file?.name || "",
+    type: file?.type || "",
+    size: file?.size || 0,
+    sizeMb: file ? formatMb(file.size) : "0.0MB",
+  };
+}
+
+function logContentUploadStep(step, details = {}) {
+  console.info(`[content-upload] ${step}`, details);
 }
 
 function isPdfFile(file) {
@@ -279,19 +379,22 @@ async function getCurrentUserId() {
   return data.user?.id;
 }
 
-export async function uploadContentFile(
-  file,
-  folder = "content",
-  options = {}
-) {
+export async function uploadContentFile(file, teacherId) {
   assertSupabaseConfig();
 
   if (!file) {
     return "";
   }
 
-  const userId = options.userId || (await getCurrentUserId());
-  const path = `${folder}/${userId}/${Date.now()}-${safeFileName(file.name)}`;
+  const ownerId = teacherId || (await getCurrentUserId());
+  const path = `${ownerId}/${Date.now()}-${safeFileName(file.name)}`;
+  const storagePath = `${CONTENT_BUCKET}/${path}`;
+
+  logContentUploadStep("selected file", getDebugFileInfo(file));
+  logContentUploadStep("upload start", {
+    storagePath,
+    contentType: file.type || "application/octet-stream",
+  });
 
   const { error } = await supabase.storage
     .from(CONTENT_BUCKET)
@@ -302,9 +405,10 @@ export async function uploadContentFile(
     });
 
   if (error) {
-    console.error("Supabase content upload failed:", {
+    console.error("[content-upload] upload error", {
       bucket: CONTENT_BUCKET,
       path,
+      storagePath,
       fileName: file.name,
       fileSize: file.size,
       fileType: file.type,
@@ -314,6 +418,9 @@ export async function uploadContentFile(
   }
 
   const { data } = supabase.storage.from(CONTENT_BUCKET).getPublicUrl(path);
+  logContentUploadStep("upload success", { storagePath });
+  logContentUploadStep("public URL", { publicUrl: data.publicUrl });
+
   return data.publicUrl;
 }
 
@@ -323,9 +430,9 @@ export async function uploadContentFiles(files = {}, options = {}) {
   const onProgress = options.onProgress || (() => {});
   const userId = options.userId || (await getCurrentUserId());
   const uploadQueue = [
-    { key: "image", folder: "content-images", file: files.image },
-    { key: "audio", folder: "content-audio", file: files.audio },
-    { key: "pdf", folder: "content-pdf", file: files.pdf },
+    { key: "image", file: files.image },
+    { key: "audio", file: files.audio },
+    { key: "pdf", file: files.pdf },
   ].filter((item) => Boolean(item.file));
 
   if (!uploadQueue.length) {
@@ -341,6 +448,12 @@ export async function uploadContentFiles(files = {}, options = {}) {
   }
 
   onProgress({ percent: 10, message: "Validating files..." });
+  logContentUploadStep("selected files", {
+    files: uploadQueue.map((item) => ({
+      kind: item.key,
+      ...getDebugFileInfo(item.file),
+    })),
+  });
   uploadQueue.forEach((item) => validateRawContentFile(item.file, item.key));
 
   onProgress({ percent: 18, message: "Optimizing image if needed..." });
@@ -364,9 +477,7 @@ export async function uploadContentFiles(files = {}, options = {}) {
   try {
     entries = await Promise.all(
       preparedQueue.map(async (item) => {
-        const publicUrl = await uploadContentFile(item.file, item.folder, {
-          userId,
-        });
+        const publicUrl = await uploadContentFile(item.file, userId);
         completed += 1;
         onProgress({
           percent: 30 + Math.round((completed / preparedQueue.length) * 50),
@@ -397,11 +508,12 @@ export async function createContent(payload) {
     payload.teacherId || payload.teacher_id || (await getCurrentUserId());
   const metadata = buildContentMetadata(payload);
   const contentType = inferContentType(payload);
+  const textContent = serializeContentMetadata(metadata);
   const record = {
     teacher_id: teacherId,
     class_id: payload.classId || payload.class_id || null,
     title: payload.title.trim(),
-    description: payload.description?.trim() || "",
+    description: trimToLimit(payload.description, DESCRIPTION_MAX_CHARS),
     content_type: contentType,
     file_url:
       payload.fileUrl ||
@@ -410,8 +522,13 @@ export async function createContent(payload) {
       payload.audioUrl ||
       payload.imageUrl ||
       "",
-    text_content: JSON.stringify(metadata),
+    text_content: textContent,
   };
+
+  logContentUploadStep("db insert payload", {
+    ...record,
+    text_content_length: record.text_content.length,
+  });
 
   const { data, error } = await supabase
     .from("contents")
@@ -420,10 +537,14 @@ export async function createContent(payload) {
     .single();
 
   if (error) {
-    console.error("Supabase content insert failed:", { record, error });
+    console.error("[content-upload] db insert error", {
+      record,
+      error,
+    });
     throw error;
   }
 
+  logContentUploadStep("db insert success", { id: data.id });
   return mapContent(data);
 }
 
@@ -432,10 +553,11 @@ export async function updateContent(id, payload) {
 
   const metadata = buildContentMetadata(payload);
   const contentType = inferContentType(payload);
+  const textContent = serializeContentMetadata(metadata);
   const record = {
     class_id: payload.classId || payload.class_id || null,
     title: payload.title.trim(),
-    description: payload.description?.trim() || "",
+    description: trimToLimit(payload.description, DESCRIPTION_MAX_CHARS),
     content_type: contentType,
     file_url:
       payload.fileUrl ||
@@ -444,8 +566,14 @@ export async function updateContent(id, payload) {
       payload.audioUrl ||
       payload.imageUrl ||
       "",
-    text_content: JSON.stringify(metadata),
+    text_content: textContent,
   };
+
+  logContentUploadStep("db update payload", {
+    id,
+    ...record,
+    text_content_length: record.text_content.length,
+  });
 
   const { data, error } = await supabase
     .from("contents")
@@ -455,10 +583,11 @@ export async function updateContent(id, payload) {
     .single();
 
   if (error) {
-    console.error("Supabase content update failed:", { id, record, error });
+    console.error("[content-upload] db update error", { id, record, error });
     throw error;
   }
 
+  logContentUploadStep("db update success", { id: data.id });
   return mapContent(data);
 }
 

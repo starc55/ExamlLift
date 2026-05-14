@@ -1,3 +1,8 @@
+const DESCRIPTION_MAX_CHARS = 1000;
+const LESSON_NOTES_MAX_CHARS = 10000;
+const ASSIGNMENT_TITLE_MAX_CHARS = 200;
+const ASSIGNMENT_BRIEF_MAX_CHARS = 2000;
+
 function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
   const fileFields = [
     {
@@ -83,6 +88,7 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
           value={form.description}
           onChange={(event) => onChange("description", event.target.value)}
           rows={4}
+          maxLength={DESCRIPTION_MAX_CHARS}
           placeholder="Short lesson description"
           required
           disabled={isSubmitting}
@@ -94,6 +100,7 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
           value={form.lessonNotes}
           onChange={(event) => onChange("lessonNotes", event.target.value)}
           rows={6}
+          maxLength={LESSON_NOTES_MAX_CHARS}
           placeholder="Write short notes. Each paragraph becomes one lesson block."
           disabled={isSubmitting}
         />
@@ -103,7 +110,10 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
           Assignment title
           <input
             value={form.assignmentTitle}
-            onChange={(event) => onChange("assignmentTitle", event.target.value)}
+            onChange={(event) =>
+              onChange("assignmentTitle", event.target.value)
+            }
+            maxLength={ASSIGNMENT_TITLE_MAX_CHARS}
             placeholder="Homework or follow-up task title"
             required
             disabled={isSubmitting}
@@ -115,6 +125,7 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
             value={form.assignmentInstructions}
             onChange={(event) => onChange("assignmentInstructions", event.target.value)}
             rows={4}
+            maxLength={ASSIGNMENT_BRIEF_MAX_CHARS}
             placeholder="Describe what the student should submit after the lesson."
             required
             disabled={isSubmitting}

@@ -32,6 +32,30 @@ function inferContentType(payload) {
   return "text";
 }
 
+function buildContentMetadata(payload) {
+  return {
+    category: payload.category || "General English",
+    level: payload.level || "Intermediate",
+    duration: payload.duration || "10 min",
+    imageUrl: payload.imageUrl || "",
+    audioUrl: payload.audioUrl || "",
+    pdfUrl: payload.pdfUrl || "",
+    videoUrl: payload.videoUrl || "",
+    sections: payload.sections?.length
+      ? payload.sections
+      : [
+          {
+            heading: "Lesson overview",
+            body: payload.lessonNotes || payload.description || "",
+          },
+        ],
+    assignmentTitle: payload.assignmentTitle || `${payload.title} follow-up task`,
+    assignmentInstructions:
+      payload.assignmentInstructions ||
+      "Upload your completed task or reflection for teacher review.",
+  };
+}
+
 function mapContent(row) {
   if (!row) {
     return null;
@@ -123,27 +147,7 @@ export async function createContent(payload) {
   assertSupabaseConfig();
 
   const teacherId = payload.teacherId || payload.teacher_id || (await getCurrentUserId());
-  const metadata = {
-    category: payload.category || "General English",
-    level: payload.level || "Intermediate",
-    duration: payload.duration || "10 min",
-    imageUrl: payload.imageUrl || "",
-    audioUrl: payload.audioUrl || "",
-    pdfUrl: payload.pdfUrl || "",
-    videoUrl: payload.videoUrl || "",
-    sections: payload.sections?.length
-      ? payload.sections
-      : [
-          {
-            heading: "Lesson overview",
-            body: payload.lessonNotes || payload.description || "",
-          },
-        ],
-    assignmentTitle: payload.assignmentTitle || `${payload.title} follow-up task`,
-    assignmentInstructions:
-      payload.assignmentInstructions ||
-      "Upload your completed task or reflection for teacher review.",
-  };
+  const metadata = buildContentMetadata(payload);
   const contentType = inferContentType(payload);
   const record = {
     teacher_id: teacherId,
@@ -164,6 +168,40 @@ export async function createContent(payload) {
   const { data, error } = await supabase
     .from("contents")
     .insert(record)
+    .select("*, profiles:teacher_id(full_name)")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapContent(data);
+}
+
+export async function updateContent(id, payload) {
+  assertSupabaseConfig();
+
+  const metadata = buildContentMetadata(payload);
+  const contentType = inferContentType(payload);
+  const record = {
+    class_id: payload.classId || payload.class_id || null,
+    title: payload.title.trim(),
+    description: payload.description?.trim() || "",
+    content_type: contentType,
+    file_url:
+      payload.fileUrl ||
+      payload.file_url ||
+      payload.pdfUrl ||
+      payload.audioUrl ||
+      payload.imageUrl ||
+      "",
+    text_content: JSON.stringify(metadata),
+  };
+
+  const { data, error } = await supabase
+    .from("contents")
+    .update(record)
+    .eq("id", id)
     .select("*, profiles:teacher_id(full_name)")
     .single();
 

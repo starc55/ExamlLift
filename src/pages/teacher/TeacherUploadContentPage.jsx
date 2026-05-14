@@ -1,15 +1,27 @@
 import { useEffect, useState } from "react";
-import { FaChalkboardUser, FaChevronDown, FaLayerGroup, FaUsers } from "react-icons/fa6";
+import {
+  FaChalkboardUser,
+  FaChevronDown,
+  FaEllipsisVertical,
+  FaEye,
+  FaLayerGroup,
+  FaPenToSquare,
+  FaTrashCan,
+  FaUsers,
+} from "react-icons/fa6";
 import { Link } from "react-router-dom";
 import UploadForm from "../../components/content/UploadForm";
 import ContentCard from "../../components/content/ContentCard";
 import ErrorAlert from "../../components/feedback/ErrorAlert";
+import Modal from "../../components/layout/Modal";
 import { useAuth } from "../../context/AuthContext";
 import { getTeacherClasses } from "../../services/classes/classService";
 import { getAllHomeworkSubmissions } from "../../services/homework/homeworkService";
 import {
   createContent,
+  deleteContent,
   getAllContent,
+  updateContent,
   uploadContentFile,
 } from "../../services/content/contentService";
 
@@ -42,6 +54,12 @@ function TeacherUploadContentPage() {
   const [contentItems, setContentItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedContent, setSelectedContent] = useState(null);
+  const [editingContent, setEditingContent] = useState(null);
+  const [deletingContent, setDeletingContent] = useState(null);
+  const [editForm, setEditForm] = useState(initialForm);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadPageData = async () => {
     setLoading(true);
@@ -82,6 +100,7 @@ function TeacherUploadContentPage() {
         throw new Error("Avval class yarating yoki class tanlang.");
       }
 
+      setStatusMessage("Files Supabase Storagega yuklanmoqda...");
       const [imageUrl, audioUrl, pdfUrl] = await Promise.all([
         uploadContentFile(files.image, "content-images"),
         uploadContentFile(files.audio, "content-audio"),
@@ -97,7 +116,8 @@ function TeacherUploadContentPage() {
           body,
         }));
 
-      await createContent({
+      setStatusMessage("Content metadata databasega saqlanmoqda...");
+      const savedContent = await createContent({
         ...form,
         classId: form.classId,
         imageUrl,
@@ -109,7 +129,7 @@ function TeacherUploadContentPage() {
 
       setForm({ ...initialForm, classId: classes[0]?.id || "" });
       setFiles({ image: null, audio: null, pdf: null });
-      await loadPageData();
+      setContentItems((current) => [savedContent, ...current].slice(0, 6));
       setStatusMessage("New lesson saved to Supabase and published to the selected class.");
     } catch (requestError) {
       setStatusTone("error");
@@ -131,6 +151,85 @@ function TeacherUploadContentPage() {
   };
 
   const selectedClass = classes.find((item) => item.id === form.classId) || null;
+
+  const contentToForm = (item) => ({
+    title: item.title || "",
+    classId: item.classId || "",
+    category: item.category || "General English",
+    level: item.level || "Intermediate",
+    duration: item.duration || "15 min",
+    description: item.description || "",
+    lessonNotes: (item.sections || []).map((section) => section.body).join("\n"),
+    assignmentTitle: item.assignmentTitle || "",
+    assignmentInstructions: item.assignmentInstructions || "",
+    imageUrl: item.imageUrl || "",
+    audioUrl: item.audioUrl || "",
+    pdfUrl: item.pdfUrl || "",
+    fileUrl: item.fileUrl || "",
+    fileNames: {
+      image: item.imageUrl ? "Existing image" : "",
+      audio: item.audioUrl ? "Existing audio" : "",
+      pdf: item.pdfUrl ? "Existing PDF" : "",
+    },
+  });
+
+  const openEditContent = (item) => {
+    setEditingContent(item);
+    setEditForm(contentToForm(item));
+  };
+
+  const handleEditSubmit = async (event) => {
+    event.preventDefault();
+    setIsEditing(true);
+    setError("");
+    setStatusMessage("");
+
+    try {
+      const sections = editForm.lessonNotes
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map((body, index) => ({
+          heading: `Lesson block ${index + 1}`,
+          body,
+        }));
+      const updated = await updateContent(editingContent.id, {
+        ...editForm,
+        sections,
+      });
+
+      setContentItems((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item))
+      );
+      setEditingContent(null);
+      setStatusTone("success");
+      setStatusMessage("Content updated.");
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
+  const handleDeleteContent = async () => {
+    setIsDeleting(true);
+    setError("");
+    setStatusMessage("");
+
+    try {
+      await deleteContent(deletingContent.id);
+      setContentItems((current) =>
+        current.filter((item) => item.id !== deletingContent.id)
+      );
+      setDeletingContent(null);
+      setStatusTone("success");
+      setStatusMessage("Content deleted.");
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="page-stack">
@@ -218,13 +317,40 @@ function TeacherUploadContentPage() {
           </section>
         ) : null}
         {contentItems.map((item) => (
-          <ContentCard
-            key={item.id}
-            item={item}
-            isActive={false}
-            onOpen={() => {}}
-            showAction={false}
-          />
+          <article key={item.id} className="teacher-content-item">
+            <ContentCard
+              item={item}
+              isActive={false}
+              onOpen={() => {}}
+              showAction={false}
+            />
+            <div className="teacher-content-item__footer">
+              <div>
+                <span className="pill pill--soft">{item.level}</span>
+                <span className="pill pill--soft">{item.category}</span>
+              </div>
+              <details className="action-menu">
+                <summary aria-label={`${item.title} actions`}>
+                  <FaEllipsisVertical />
+                  <span>Actions</span>
+                </summary>
+                <div className="action-menu__list">
+                  <button type="button" onClick={() => setSelectedContent(item)}>
+                    <FaEye />
+                    <span>View</span>
+                  </button>
+                  <button type="button" onClick={() => openEditContent(item)}>
+                    <FaPenToSquare />
+                    <span>Edit</span>
+                  </button>
+                  <button type="button" onClick={() => setDeletingContent(item)}>
+                    <FaTrashCan />
+                    <span>Delete</span>
+                  </button>
+                </div>
+              </details>
+            </div>
+          </article>
         ))}
       </section>
 
@@ -248,6 +374,202 @@ function TeacherUploadContentPage() {
           </Link>
         </div>
       </section>
+
+      <Modal
+        isOpen={Boolean(selectedContent)}
+        title={selectedContent?.title || "Content preview"}
+        onClose={() => setSelectedContent(null)}
+        className="modal-card--wide"
+      >
+        {selectedContent ? (
+          <div className="modal-card__content">
+            <p>{selectedContent.description}</p>
+            <div className="content-action-preview__meta">
+              <span>{selectedContent.category}</span>
+              <span>{selectedContent.level}</span>
+              <span>{selectedContent.duration}</span>
+            </div>
+            <div className="content-preview__notes">
+              {selectedContent.sections.map((section) => (
+                <div key={section.heading} className="prose-block">
+                  <h4>{section.heading}</h4>
+                  <p>{section.body}</p>
+                </div>
+              ))}
+            </div>
+            <div className="card-actions">
+              {selectedContent.pdfUrl ? (
+                <a className="secondary-button" href={selectedContent.pdfUrl} target="_blank" rel="noreferrer">
+                  Open PDF
+                </a>
+              ) : null}
+              {selectedContent.audioUrl ? (
+                <a className="secondary-button" href={selectedContent.audioUrl} target="_blank" rel="noreferrer">
+                  Open audio
+                </a>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(editingContent)}
+        title="Edit content"
+        onClose={() => setEditingContent(null)}
+        className="modal-card--wide"
+      >
+        <form className="modal-form content-edit-form" onSubmit={handleEditSubmit}>
+          <div className="form-grid">
+            <label>
+              Class
+              <select
+                value={editForm.classId}
+                onChange={(event) =>
+                  setEditForm((current) => ({ ...current, classId: event.target.value }))
+                }
+                required
+              >
+                <option value="">Select class</option>
+                {classes.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Title
+              <input
+                value={editForm.title}
+                onChange={(event) =>
+                  setEditForm((current) => ({ ...current, title: event.target.value }))
+                }
+                required
+              />
+            </label>
+            <label>
+              Category
+              <input
+                value={editForm.category}
+                onChange={(event) =>
+                  setEditForm((current) => ({ ...current, category: event.target.value }))
+                }
+              />
+            </label>
+            <label>
+              Level
+              <select
+                value={editForm.level}
+                onChange={(event) =>
+                  setEditForm((current) => ({ ...current, level: event.target.value }))
+                }
+              >
+                <option>Beginner</option>
+                <option>Elementary</option>
+                <option>Intermediate</option>
+                <option>Upper-intermediate</option>
+                <option>Advanced</option>
+              </select>
+            </label>
+            <label>
+              Duration
+              <input
+                value={editForm.duration}
+                onChange={(event) =>
+                  setEditForm((current) => ({ ...current, duration: event.target.value }))
+                }
+              />
+            </label>
+          </div>
+          <label>
+            Description
+            <textarea
+              rows={4}
+              value={editForm.description}
+              onChange={(event) =>
+                setEditForm((current) => ({ ...current, description: event.target.value }))
+              }
+              required
+            />
+          </label>
+          <label>
+            Lesson notes
+            <textarea
+              rows={7}
+              value={editForm.lessonNotes}
+              onChange={(event) =>
+                setEditForm((current) => ({ ...current, lessonNotes: event.target.value }))
+              }
+            />
+          </label>
+          <div className="form-grid">
+            <label>
+              Assignment title
+              <input
+                value={editForm.assignmentTitle}
+                onChange={(event) =>
+                  setEditForm((current) => ({ ...current, assignmentTitle: event.target.value }))
+                }
+              />
+            </label>
+            <label className="form-grid__wide">
+              Assignment brief
+              <textarea
+                rows={4}
+                value={editForm.assignmentInstructions}
+                onChange={(event) =>
+                  setEditForm((current) => ({
+                    ...current,
+                    assignmentInstructions: event.target.value,
+                  }))
+                }
+              />
+            </label>
+          </div>
+          <div className="manage-test-form__footer">
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => setEditingContent(null)}
+            >
+              Cancel
+            </button>
+            <button className="primary-button" type="submit" disabled={isEditing}>
+              {isEditing ? "Saving..." : "Save changes"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(deletingContent)}
+        title="Delete content?"
+        onClose={() => setDeletingContent(null)}
+      >
+        <div className="modal-card__content">
+          <p>
+            {deletingContent?.title} contentini o'chirishni tasdiqlaysizmi?
+          </p>
+          <div className="card-actions">
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => setDeletingContent(null)}
+            >
+              Cancel
+            </button>
+            <button
+              className="danger-button"
+              type="button"
+              onClick={handleDeleteContent}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

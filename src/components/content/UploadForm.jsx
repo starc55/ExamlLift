@@ -1,11 +1,5 @@
 import { memo } from "react";
 
-const DESCRIPTION_MAX_CHARS = 1000;
-const LESSON_NOTES_MAX_CHARS = 50000;
-const ASSIGNMENT_TITLE_MAX_CHARS = 200;
-const ASSIGNMENT_BRIEF_MAX_CHARS = 2000;
-const LESSON_NOTES_WARNING_CHARS = 10000;
-
 const fileFields = [
   {
     key: "image",
@@ -31,9 +25,6 @@ const fileFields = [
 ];
 
 function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
-  const lessonNotesLength = form.lessonNotes?.length || 0;
-  const lessonNotesIsLarge = lessonNotesLength >= LESSON_NOTES_WARNING_CHARS;
-
   return (
     <form className="upload-form card" onSubmit={onSubmit}>
       <div className="section-heading">
@@ -83,77 +74,6 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
             value={form.duration}
             onChange={(event) => onChange("duration", event.target.value)}
             placeholder="15 min"
-            required
-            disabled={isSubmitting}
-          />
-        </label>
-      </div>
-      <label>
-        Description
-        <textarea
-          value={form.description}
-          onChange={(event) => onChange("description", event.target.value)}
-          rows={4}
-          maxLength={DESCRIPTION_MAX_CHARS}
-          placeholder="Short lesson description"
-          required
-          disabled={isSubmitting}
-        />
-      </label>
-      <label>
-        <span className="field-label-row">
-          <span>Lesson notes</span>
-          <span
-            className={
-              lessonNotesIsLarge
-                ? "field-counter field-counter--warning"
-                : "field-counter"
-            }
-          >
-            {lessonNotesLength}/{LESSON_NOTES_MAX_CHARS}
-          </span>
-        </span>
-        {isSubmitting ? (
-          <span className="field-warning">
-            Lesson text is hidden while saving.
-          </span>
-        ) : (
-          <textarea
-            value={form.lessonNotes}
-            onChange={(event) => onChange("lessonNotes", event.target.value)}
-            rows={6}
-            maxLength={LESSON_NOTES_MAX_CHARS}
-            placeholder="Write short notes. Each paragraph becomes one lesson block."
-          />
-        )}
-        {lessonNotesIsLarge ? (
-          <span className="field-warning">
-            Large lesson text will be saved in content details.
-          </span>
-        ) : null}
-      </label>
-      <div className="form-grid">
-        <label>
-          Assignment title
-          <input
-            value={form.assignmentTitle}
-            onChange={(event) =>
-              onChange("assignmentTitle", event.target.value)
-            }
-            maxLength={ASSIGNMENT_TITLE_MAX_CHARS}
-            placeholder="Homework or follow-up task title"
-            required
-            disabled={isSubmitting}
-          />
-        </label>
-        <label className="form-grid__wide">
-          Assignment brief
-          <textarea
-            value={form.assignmentInstructions}
-            onChange={(event) => onChange("assignmentInstructions", event.target.value)}
-            rows={4}
-            maxLength={ASSIGNMENT_BRIEF_MAX_CHARS}
-            placeholder="Describe what the student should submit after the lesson."
             required
             disabled={isSubmitting}
           />

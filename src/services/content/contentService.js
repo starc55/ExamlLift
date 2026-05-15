@@ -176,15 +176,11 @@ function buildContentDetailRecord(payload, contentId) {
     body,
     sections: normalizeDetailSections(payload.sections),
     assignment_title: trimToLimit(
-      payload.assignmentTitle ||
-        payload.assignment_title ||
-        `${payload.title} follow-up task`,
+      payload.assignmentTitle ?? payload.assignment_title ?? "",
       ASSIGNMENT_TITLE_MAX_CHARS
     ),
     assignment_instructions: trimToLimit(
-      payload.assignmentInstructions ||
-        payload.assignment_instructions ||
-        "Upload your completed task or reflection for teacher review.",
+      payload.assignmentInstructions ?? payload.assignment_instructions ?? "",
       ASSIGNMENT_INSTRUCTIONS_MAX_CHARS
     ),
   };

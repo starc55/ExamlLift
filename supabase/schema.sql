@@ -36,7 +36,6 @@ create table if not exists public.contents (
   description text,
   content_type text check (content_type in ('text', 'pdf', 'audio', 'image', 'video')),
   file_url text,
-  text_content text,
   created_at timestamptz default now()
 );
 

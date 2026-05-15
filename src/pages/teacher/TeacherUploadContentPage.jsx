@@ -82,11 +82,26 @@ const contentToForm = (item) => ({
 });
 
 function getPayloadSize(payload) {
-  try {
-    return JSON.stringify(payload).length;
-  } catch {
-    return 0;
+  if (typeof payload === "string") {
+    return payload.length;
   }
+
+  if (typeof payload === "number" || typeof payload === "boolean") {
+    return String(payload).length;
+  }
+
+  if (Array.isArray(payload)) {
+    return payload.reduce((total, item) => total + getPayloadSize(item), 0);
+  }
+
+  if (payload && typeof payload === "object") {
+    return Object.entries(payload).reduce(
+      (total, [key, value]) => total + key.length + getPayloadSize(value),
+      0
+    );
+  }
+
+  return 0;
 }
 
 function getPreviewBody(body) {

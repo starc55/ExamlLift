@@ -123,7 +123,7 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
         />
         {lessonNotesIsLarge ? (
           <span className="field-warning">
-            Large lesson text will be compacted before saving.
+            Large lesson text will be saved in content details.
           </span>
         ) : null}
       </label>

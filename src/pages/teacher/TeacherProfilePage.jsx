@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import ErrorAlert from "../../components/feedback/ErrorAlert";
 import { useAuth } from "../../context/AuthContext";
-import { getAllContent } from "../../services/content/contentService";
+import { getContentList } from "../../services/content/contentService";
 import { getAllHomeworkSubmissions } from "../../services/homework/homeworkService";
 import { getTeacherTests } from "../../services/tests/testService";
 
@@ -23,7 +23,7 @@ function TeacherProfilePage() {
 
       try {
         const [content, tests, submissions] = await Promise.all([
-          getAllContent(),
+          getContentList(),
           getTeacherTests(),
           getAllHomeworkSubmissions(),
         ]);

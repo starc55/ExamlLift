@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import AudioPlayer from "../../components/audio/AudioPlayer";
 import ErrorAlert from "../../components/feedback/ErrorAlert";
 import PDFViewer from "../../components/pdf/PDFViewer";
-import { getContentById } from "../../services/content/contentService";
+import { getContentDetails } from "../../services/content/contentService";
 
 function StudentContentDetailPage() {
   const { id } = useParams();
@@ -19,7 +19,7 @@ function StudentContentDetailPage() {
       setError("");
 
       try {
-        const data = await getContentById(id);
+        const data = await getContentDetails(id);
 
         if (isMounted) {
           setSelectedContent(data);

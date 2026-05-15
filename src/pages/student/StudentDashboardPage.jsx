@@ -5,7 +5,7 @@ import ErrorAlert from "../../components/feedback/ErrorAlert";
 import ProgressBar from "../../components/ProgressBar";
 import TestCard from "../../components/cards/TestCard";
 import { useAuth } from "../../context/AuthContext";
-import { getAllContent } from "../../services/content/contentService";
+import { getContentList } from "../../services/content/contentService";
 import { getHomeworkSubmissionsByStudent } from "../../services/homework/homeworkService";
 import { getStudentResults } from "../../services/results/resultService";
 import { getStudentTestsByClass } from "../../services/tests/testService";
@@ -36,7 +36,7 @@ function StudentDashboardPage() {
       const defaultClassId = nextClasses[0]?.id || null;
       const [nextContent, nextTests, nextResults, nextAssignments] =
         await Promise.all([
-          getAllContent(),
+          getContentList(),
           getStudentTestsByClass(defaultClassId),
           getStudentResults(currentUser.id),
           getHomeworkSubmissionsByStudent(currentUser.id),

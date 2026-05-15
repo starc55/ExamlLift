@@ -4,7 +4,7 @@ import DashboardCard from "../../components/dashboard/DashboardCard";
 import ErrorAlert from "../../components/feedback/ErrorAlert";
 import TestCard from "../../components/cards/TestCard";
 import { getTeacherClasses } from "../../services/classes/classService";
-import { getAllContent } from "../../services/content/contentService";
+import { getContentList } from "../../services/content/contentService";
 import { getAllHomeworkSubmissions } from "../../services/homework/homeworkService";
 import { getAllResults } from "../../services/results/resultService";
 import { getTeacherTests } from "../../services/tests/testService";
@@ -29,7 +29,7 @@ function TeacherDashboardPage() {
         const [nextClasses, nextContent, nextTests, nextResults, nextAssignments] =
           await Promise.all([
             getTeacherClasses(),
-            getAllContent(),
+            getContentList(),
             getTeacherTests(),
             getAllResults(),
             getAllHomeworkSubmissions(),

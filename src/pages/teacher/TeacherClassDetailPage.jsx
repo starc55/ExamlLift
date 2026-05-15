@@ -5,7 +5,7 @@ import ErrorAlert from "../../components/feedback/ErrorAlert";
 import ResultTable from "../../components/dashboard/ResultTable";
 import TestCard from "../../components/cards/TestCard";
 import { getClassById } from "../../services/classes/classService";
-import { getClassContents } from "../../services/content/contentService";
+import { getContentList } from "../../services/content/contentService";
 import { getStudentTestsByClass } from "../../services/tests/testService";
 import { getTeacherClassResults } from "../../services/results/resultService";
 
@@ -29,7 +29,7 @@ function TeacherClassDetailPage() {
       try {
         const [nextClass, nextContents, nextTests, nextResults] = await Promise.all([
           getClassById(id),
-          getClassContents(id),
+          getContentList({ classId: id }),
           getStudentTestsByClass(id),
           getTeacherClassResults({ classId: id }),
         ]);

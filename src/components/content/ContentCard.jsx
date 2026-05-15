@@ -10,6 +10,11 @@ function ContentCard({
   showAction = true,
   actionLabel = "Open lesson",
 }) {
+  const description =
+    item.description?.length > 120
+      ? `${item.description.slice(0, 120).trim()}...`
+      : item.description;
+
   return (
     <motion.article
       className={`content-library-card ${
@@ -28,7 +33,7 @@ function ContentCard({
       <div className="content-library-card__body">
         <span className="pill">{item.level}</span>
         <h3>{item.title}</h3>
-        <p>{item.description}</p>
+        <p>{description}</p>
         <div className="content-card__meta">
           <span className="meta-inline">
             <FaBookOpen className="meta-inline__icon" />

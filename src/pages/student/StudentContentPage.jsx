@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import ContentCard from "../../components/content/ContentCard";
 import ErrorAlert from "../../components/feedback/ErrorAlert";
-import { getAllContent } from "../../services/content/contentService";
+import { getContentList } from "../../services/content/contentService";
 
 function StudentContentPage() {
   const [contentItems, setContentItems] = useState([]);
@@ -16,7 +16,7 @@ function StudentContentPage() {
       setError("");
 
       try {
-        const data = await getAllContent();
+        const data = await getContentList();
 
         if (isMounted) {
           setContentItems(data);

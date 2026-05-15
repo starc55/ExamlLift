@@ -27,7 +27,8 @@ import { getAllHomeworkSubmissions } from "../../services/homework/homeworkServi
 import {
   createContent,
   deleteContent,
-  getAllContent,
+  getContentDetails,
+  getContentList,
   removeEmptyFields,
   updateContent,
   uploadContentFiles,
@@ -143,6 +144,8 @@ function TeacherUploadContentPage() {
   const { currentUser } = useAuth();
   const currentUserId = currentUser?.id;
   const submitLockRef = useRef(false);
+  const contentDetailsCacheRef = useRef(new Map());
+  const previewRequestRef = useRef(null);
   const [form, setForm] = useState(initialForm);
   const [uploadFormKey, setUploadFormKey] = useState(0);
   const [files, setFiles] = useState({ image: null, audio: null, pdf: null });
@@ -159,6 +162,8 @@ function TeacherUploadContentPage() {
     message: "",
   });
   const [selectedContent, setSelectedContent] = useState(null);
+  const [contentPreviewLoading, setContentPreviewLoading] = useState(false);
+  const [contentPreviewError, setContentPreviewError] = useState("");
   const [editingContent, setEditingContent] = useState(null);
   const [deletingContent, setDeletingContent] = useState(null);
   const [editForm, setEditForm] = useState(initialForm);
@@ -167,7 +172,7 @@ function TeacherUploadContentPage() {
 
   const refreshContentList = useCallback(async () => {
     try {
-      const nextContent = await getAllContent();
+      const nextContent = await getContentList();
       setContentItems(nextContent.slice(0, 6));
     } catch (requestError) {
       console.error("Content list refresh failed:", requestError);
@@ -190,7 +195,7 @@ function TeacherUploadContentPage() {
     try {
       const [nextClasses, nextContent] = await Promise.all([
         getTeacherClasses(),
-        getAllContent(),
+        getContentList(),
       ]);
       setClasses(nextClasses);
       setContentItems(nextContent.slice(0, 6));
@@ -360,10 +365,65 @@ function TeacherUploadContentPage() {
     }));
   }, []);
 
-  const openEditContent = useCallback((item) => {
-    setEditingContent(item);
-    setEditForm(contentToForm(item));
+  const getCachedContentDetails = useCallback(async (item) => {
+    const cachedDetails = contentDetailsCacheRef.current.get(item.id);
+
+    if (cachedDetails) {
+      return cachedDetails;
+    }
+
+    const details = await getContentDetails(item.id);
+    if (!details) {
+      throw new Error("Content details not found.");
+    }
+
+    contentDetailsCacheRef.current.set(item.id, details);
+    return details;
   }, []);
+
+  const openContentPreview = useCallback(async (item) => {
+    const requestId = Symbol(item.id);
+
+    previewRequestRef.current = requestId;
+    setSelectedContent(item);
+    setContentPreviewError("");
+    setContentPreviewLoading(true);
+
+    try {
+      const details = await getCachedContentDetails(item);
+
+      if (previewRequestRef.current === requestId) {
+        setSelectedContent(details);
+      }
+    } catch (requestError) {
+      if (previewRequestRef.current === requestId) {
+        setContentPreviewError(requestError.message);
+      }
+    } finally {
+      if (previewRequestRef.current === requestId) {
+        setContentPreviewLoading(false);
+      }
+    }
+  }, [getCachedContentDetails]);
+
+  const closeContentPreview = useCallback(() => {
+    previewRequestRef.current = null;
+    setSelectedContent(null);
+    setContentPreviewError("");
+    setContentPreviewLoading(false);
+  }, []);
+
+  const openEditContent = useCallback(async (item) => {
+    setError("");
+
+    try {
+      const details = await getCachedContentDetails(item);
+      setEditingContent(details);
+      setEditForm(contentToForm(details));
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  }, [getCachedContentDetails]);
 
   const handleEditSubmit = async (event) => {
     event.preventDefault();
@@ -389,6 +449,7 @@ function TeacherUploadContentPage() {
       });
       const updated = await updateContent(editingContent.id, cleanedPayload);
 
+      contentDetailsCacheRef.current.delete(editingContent.id);
       setContentItems((current) =>
         current.map((item) => (item.id === updated.id ? updated : item))
       );
@@ -409,6 +470,7 @@ function TeacherUploadContentPage() {
 
     try {
       await deleteContent(deletingContent.id);
+      contentDetailsCacheRef.current.delete(deletingContent.id);
       setContentItems((current) =>
         current.filter((item) => item.id !== deletingContent.id)
       );
@@ -443,7 +505,7 @@ function TeacherUploadContentPage() {
                 <span>Actions</span>
               </summary>
               <div className="action-menu__list">
-                <button type="button" onClick={() => setSelectedContent(item)}>
+                <button type="button" onClick={() => openContentPreview(item)}>
                   <FaEye />
                   <span>View</span>
                 </button>
@@ -460,7 +522,7 @@ function TeacherUploadContentPage() {
           </div>
         </article>
       )),
-    [contentItems, openEditContent]
+    [contentItems, openContentPreview, openEditContent]
   );
 
   return (
@@ -585,10 +647,16 @@ function TeacherUploadContentPage() {
       <Modal
         isOpen={Boolean(selectedContent)}
         title={selectedContent?.title || "Content preview"}
-        onClose={() => setSelectedContent(null)}
+        onClose={closeContentPreview}
         className="modal-card--wide"
       >
-        {selectedContent ? <ContentPreviewBody content={selectedContent} /> : null}
+        {contentPreviewLoading ? (
+          <p className="empty-copy">Loading full lesson...</p>
+        ) : null}
+        <ErrorAlert message={contentPreviewError} />
+        {!contentPreviewLoading && !contentPreviewError && selectedContent ? (
+          <ContentPreviewBody content={selectedContent} />
+        ) : null}
       </Modal>
 
       <Modal

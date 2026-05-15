@@ -13,6 +13,9 @@ const SECTION_BODY_MAX_CHARS = 2400;
 const MAX_METADATA_SECTIONS = 5;
 const ASSIGNMENT_TITLE_MAX_CHARS = 200;
 const ASSIGNMENT_INSTRUCTIONS_MAX_CHARS = 2000;
+const CONTENT_LIST_SELECT =
+  "id,title,description,content_type,file_url,class_id,teacher_id,created_at";
+const CONTENT_DETAILS_SELECT = `${CONTENT_LIST_SELECT},text_content,profiles:teacher_id(full_name)`;
 
 const SUPPORTED_TYPES = {
   image: ["image/jpeg", "image/png", "image/webp"],
@@ -335,7 +338,46 @@ function getContentPayloadMetrics(payload, metadata, textContent) {
   };
 }
 
-function mapContent(row) {
+function mapContentListItem(row) {
+  if (!row) {
+    return null;
+  }
+
+  const contentType = row.content_type || "text";
+
+  return {
+    id: row.id,
+    teacherId: row.teacher_id,
+    teacher_id: row.teacher_id,
+    classId: row.class_id,
+    class_id: row.class_id,
+    title: row.title,
+    description: trimToLimit(row.description, 120),
+    contentType,
+    content_type: contentType,
+    fileUrl: row.file_url || "",
+    file_url: row.file_url || "",
+    category: contentType,
+    level: "Published",
+    duration: row.created_at
+      ? new Date(row.created_at).toLocaleDateString()
+      : "Recent",
+    imageUrl: contentType === "image" ? row.file_url || "" : "",
+    audioUrl: contentType === "audio" ? row.file_url || "" : "",
+    pdfUrl: contentType === "pdf" ? row.file_url || "" : "",
+    videoUrl: contentType === "video" ? row.file_url || "" : "",
+    sections: [],
+    assignmentTitle: "",
+    assignmentInstructions: "",
+    createdAt: row.created_at,
+    created_at: row.created_at,
+    createdBy: row.teacher_id,
+    createdByName: "Teacher",
+    isContentListItem: true,
+  };
+}
+
+function mapContentDetails(row) {
   if (!row) {
     return null;
   }
@@ -713,7 +755,7 @@ export async function createContent(payload) {
   const { data, error } = await supabase
     .from("contents")
     .insert(record)
-    .select("*, profiles:teacher_id(full_name)")
+    .select(CONTENT_LIST_SELECT)
     .single();
 
   if (error) {
@@ -729,7 +771,7 @@ export async function createContent(payload) {
   }
 
   logContentUploadStep("db insert success", { id: data.id });
-  return mapContent(data);
+  return mapContentListItem(data);
 }
 
 export async function updateContent(id, payload) {
@@ -761,7 +803,7 @@ export async function updateContent(id, payload) {
     .from("contents")
     .update(record)
     .eq("id", id)
-    .select("*, profiles:teacher_id(full_name)")
+    .select(CONTENT_LIST_SELECT)
     .single();
 
   if (error) {
@@ -778,34 +820,19 @@ export async function updateContent(id, payload) {
   }
 
   logContentUploadStep("db update success", { id: data.id });
-  return mapContent(data);
+  return mapContentListItem(data);
 }
 
-export async function getAllContent() {
-  assertSupabaseConfig();
-
-  const { data, error } = await supabase
-    .from("contents")
-    .select("*, profiles:teacher_id(full_name)")
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    throw error;
-  }
-
-  return (data || []).map(mapContent);
-}
-
-export async function getClassContents(classId) {
+export async function getContentList(options = {}) {
   assertSupabaseConfig();
 
   let query = supabase
     .from("contents")
-    .select("*, profiles:teacher_id(full_name)")
+    .select(CONTENT_LIST_SELECT)
     .order("created_at", { ascending: false });
 
-  if (classId) {
-    query = query.eq("class_id", classId);
+  if (options.classId) {
+    query = query.eq("class_id", options.classId);
   }
 
   const { data, error } = await query;
@@ -814,15 +841,15 @@ export async function getClassContents(classId) {
     throw error;
   }
 
-  return (data || []).map(mapContent);
+  return (data || []).map(mapContentListItem);
 }
 
-export async function getContentById(contentId) {
+export async function getContentDetails(contentId) {
   assertSupabaseConfig();
 
   const { data, error } = await supabase
     .from("contents")
-    .select("*, profiles:teacher_id(full_name)")
+    .select(CONTENT_DETAILS_SELECT)
     .eq("id", contentId)
     .maybeSingle();
 
@@ -830,7 +857,19 @@ export async function getContentById(contentId) {
     throw error;
   }
 
-  return mapContent(data);
+  return mapContentDetails(data);
+}
+
+export async function getAllContent() {
+  return getContentList();
+}
+
+export async function getClassContents(classId) {
+  return getContentList({ classId });
+}
+
+export async function getContentById(contentId) {
+  return getContentDetails(contentId);
 }
 
 export async function deleteContent(id) {

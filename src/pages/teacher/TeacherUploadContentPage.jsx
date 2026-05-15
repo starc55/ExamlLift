@@ -52,6 +52,7 @@ function TeacherUploadContentPage() {
   const { currentUser } = useAuth();
   const submitLockRef = useRef(false);
   const [form, setForm] = useState(initialForm);
+  const [uploadFormKey, setUploadFormKey] = useState(0);
   const [files, setFiles] = useState({ image: null, audio: null, pdf: null });
   const [classes, setClasses] = useState([]);
   const [submissions, setSubmissions] = useState([]);
@@ -72,19 +73,35 @@ function TeacherUploadContentPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const refreshContentList = async () => {
+    try {
+      const nextContent = await getAllContent();
+      setContentItems(nextContent.slice(0, 6));
+    } catch (requestError) {
+      console.error("Content list refresh failed:", requestError);
+    }
+  };
+
+  const refreshHomeworkSubmissions = async () => {
+    try {
+      const nextSubmissions = await getAllHomeworkSubmissions();
+      setSubmissions(nextSubmissions);
+    } catch (requestError) {
+      console.error("Homework submissions refresh failed:", requestError);
+    }
+  };
+
   const loadPageData = async () => {
     setLoading(true);
     setError("");
 
     try {
-      const [nextClasses, nextContent, nextSubmissions] = await Promise.all([
+      const [nextClasses, nextContent] = await Promise.all([
         getTeacherClasses(),
         getAllContent(),
-        getAllHomeworkSubmissions(),
       ]);
       setClasses(nextClasses);
       setContentItems(nextContent.slice(0, 6));
-      setSubmissions(nextSubmissions);
       setForm((current) => ({
         ...current,
         classId: current.classId || nextClasses[0]?.id || "",
@@ -98,6 +115,7 @@ function TeacherUploadContentPage() {
 
   useEffect(() => {
     loadPageData();
+    void refreshHomeworkSubmissions();
   }, []);
 
   const handleSubmit = async (event) => {
@@ -112,6 +130,17 @@ function TeacherUploadContentPage() {
     setError("");
     setUploadProgress({ percent: 0, message: "" });
     setIsSubmitting(true);
+    let savingCleared = false;
+    const clearSavingState = () => {
+      if (savingCleared) {
+        return;
+      }
+
+      savingCleared = true;
+      submitLockRef.current = false;
+      setIsSubmitting(false);
+      console.log("saving false");
+    };
 
     try {
       if (!form.classId) {
@@ -125,6 +154,7 @@ function TeacherUploadContentPage() {
           setStatusMessage(progress.message);
         },
       });
+      console.log("content upload done");
 
       const sections = form.lessonNotes
         .split("\n")
@@ -149,15 +179,20 @@ function TeacherUploadContentPage() {
         sections,
         teacherId: currentUser.id,
       });
+      console.log("content insert done");
 
-      setForm({ ...initialForm, classId: classes[0]?.id || "" });
+      clearSavingState();
+      setStatusTone("success");
+      setStatusMessage("Content saved successfully");
+      setForm({ ...initialForm, classId: form.classId || classes[0]?.id || "" });
       setFiles({ image: null, audio: null, pdf: null });
+      setUploadFormKey((current) => current + 1);
       setContentItems((current) => [savedContent, ...current].slice(0, 6));
       setUploadProgress({
         percent: 100,
         message: "Upload complete.",
       });
-      setStatusMessage("New lesson saved to Supabase and published to the selected class.");
+      void refreshContentList();
     } catch (requestError) {
       console.error("Teacher content save failed:", requestError);
       setStatusTone("error");
@@ -169,8 +204,7 @@ function TeacherUploadContentPage() {
         message: "",
       });
     } finally {
-      submitLockRef.current = false;
-      setIsSubmitting(false);
+      clearSavingState();
     }
   };
 
@@ -340,6 +374,7 @@ function TeacherUploadContentPage() {
       </section>
 
       <UploadForm
+        key={uploadFormKey}
         form={form}
         onChange={(field, value) => setForm((current) => ({ ...current, [field]: value }))}
         onFileChange={handleFileChange}

@@ -113,14 +113,19 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
             {lessonNotesLength}/{LESSON_NOTES_MAX_CHARS}
           </span>
         </span>
-        <textarea
-          value={form.lessonNotes}
-          onChange={(event) => onChange("lessonNotes", event.target.value)}
-          rows={6}
-          maxLength={LESSON_NOTES_MAX_CHARS}
-          placeholder="Write short notes. Each paragraph becomes one lesson block."
-          disabled={isSubmitting}
-        />
+        {isSubmitting ? (
+          <span className="field-warning">
+            Lesson text is hidden while saving.
+          </span>
+        ) : (
+          <textarea
+            value={form.lessonNotes}
+            onChange={(event) => onChange("lessonNotes", event.target.value)}
+            rows={6}
+            maxLength={LESSON_NOTES_MAX_CHARS}
+            placeholder="Write short notes. Each paragraph becomes one lesson block."
+          />
+        )}
         {lessonNotesIsLarge ? (
           <span className="field-warning">
             Large lesson text will be saved in content details.

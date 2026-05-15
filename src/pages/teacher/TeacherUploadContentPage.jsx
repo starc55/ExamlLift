@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import {
   FaChalkboardUser,
   FaChevronDown,
@@ -257,7 +258,9 @@ function TeacherUploadContentPage() {
 
       savingCleared = true;
       submitLockRef.current = false;
-      setIsSubmitting(false);
+      flushSync(() => {
+        setIsSubmitting(false);
+      });
       console.log("saving false");
       console.log("setSaving false done");
     };
@@ -295,13 +298,10 @@ function TeacherUploadContentPage() {
         percent: 88,
         message: "Content metadata databasega saqlanmoqda...",
       });
-      startTimer("DB_INSERT");
-      const cleanedPayload = removeEmptyFields({
+      startTimer("BUILD_PAYLOAD");
+      const savePayload = {
         title: form.title,
         classId: form.classId,
-        category: form.category,
-        level: form.level,
-        duration: form.duration,
         description: form.description,
         lessonNotes: form.lessonNotes,
         assignmentTitle: form.assignmentTitle,
@@ -310,16 +310,19 @@ function TeacherUploadContentPage() {
         audioUrl,
         pdfUrl,
         teacherId: currentUserId,
-      });
+      };
+      endTimer("BUILD_PAYLOAD");
       console.log("content save cleaned payload", {
-        payloadSize: getPayloadSize(cleanedPayload),
-        lessonNotesLength: cleanedPayload.lessonNotes?.length || 0,
+        payloadSize: getPayloadSize(savePayload),
+        lessonNotesLength: savePayload.lessonNotes?.length || 0,
       });
-      const savedContent = await createContent(cleanedPayload);
+      startTimer("DB_INSERT");
+      const savedContent = await createContent(savePayload);
       endTimer("DB_INSERT");
       console.log("content insert done");
       console.log("db insert done");
 
+      startTimer("SET_SUCCESS_STATE");
       clearSavingState();
       setStatusTone("success");
       setStatusMessage("Content saved successfully");
@@ -331,6 +334,7 @@ function TeacherUploadContentPage() {
         percent: 100,
         message: "Upload complete.",
       });
+      endTimer("SET_SUCCESS_STATE");
       startTimer("AFTER_SAVE_REFRESH");
       console.log("after-save refresh skipped");
       endTimer("AFTER_SAVE_REFRESH");
@@ -348,7 +352,9 @@ function TeacherUploadContentPage() {
     } finally {
       endTimer("VALIDATION");
       endTimer("FILE_UPLOAD");
+      endTimer("BUILD_PAYLOAD");
       endTimer("DB_INSERT");
+      endTimer("SET_SUCCESS_STATE");
       endTimer("AFTER_SAVE_REFRESH");
       clearSavingState();
       endTimer("SAVE_TOTAL");
@@ -683,11 +689,13 @@ function TeacherUploadContentPage() {
         onClose={closeContentPreview}
         className="modal-card--wide"
       >
-        {contentPreviewLoading ? (
+        {isSubmitting ? (
+          <p className="empty-copy">Saving content...</p>
+        ) : contentPreviewLoading ? (
           <p className="empty-copy">Loading full lesson...</p>
         ) : null}
         <ErrorAlert message={contentPreviewError} />
-        {!contentPreviewLoading && !contentPreviewError && selectedContent ? (
+        {!isSubmitting && !contentPreviewLoading && !contentPreviewError && selectedContent ? (
           <ContentPreviewBody content={selectedContent} />
         ) : null}
       </Modal>

@@ -171,10 +171,10 @@ function buildContentDetailRecord(payload, contentId) {
     LESSON_NOTES_MAX_CHARS
   );
 
-  return removeEmptyFields({
+  return {
     content_id: contentId,
     body,
-    sections: Array.isArray(payload.sections) ? payload.sections : [],
+    sections: normalizeDetailSections(payload.sections),
     assignment_title: trimToLimit(
       payload.assignmentTitle ||
         payload.assignment_title ||
@@ -187,8 +187,50 @@ function buildContentDetailRecord(payload, contentId) {
         "Upload your completed task or reflection for teacher review.",
       ASSIGNMENT_INSTRUCTIONS_MAX_CHARS
     ),
-    updated_at: new Date().toISOString(),
-  });
+  };
+}
+
+function normalizeDetailSections(sections) {
+  if (!Array.isArray(sections)) {
+    return [];
+  }
+
+  return sections
+    .map((section, index) => {
+      if (typeof section === "string") {
+        const body = trimToLimit(section, SECTION_BODY_MAX_CHARS);
+        return body ? { heading: `Lesson block ${index + 1}`, body } : null;
+      }
+
+      if (!isPlainObject(section)) {
+        return null;
+      }
+
+      return removeEmptyFields({
+        heading: trimToLimit(
+          section.heading || `Lesson block ${index + 1}`,
+          120
+        ),
+        body: trimToLimit(section.body || "", SECTION_BODY_MAX_CHARS),
+      });
+    })
+    .filter(Boolean);
+}
+
+async function withSlowDetailsWarning(promise, details = {}) {
+  const startedAt = Date.now();
+  const warningTimer = setTimeout(() => {
+    console.warn("INSERT_CONTENT_DETAILS exceeded 5000ms", {
+      ...details,
+      elapsedMs: Date.now() - startedAt,
+    });
+  }, 5000);
+
+  try {
+    return await promise;
+  } finally {
+    clearTimeout(warningTimer);
+  }
 }
 
 function normalizeParsedSections(metadata, fallbackText) {
@@ -674,21 +716,21 @@ export async function uploadContentFiles(files = {}, options = {}) {
 export async function createContent(payload) {
   assertSupabaseConfig();
 
-  const cleanedPayload = removeEmptyFields(payload);
+  const cleanedPayload = payload || {};
   const teacherId =
     cleanedPayload.teacherId ||
     cleanedPayload.teacher_id ||
     (await getCurrentUserId());
   const contentType = inferContentType(cleanedPayload);
   const primaryFileUrl = getPrimaryFileUrl(cleanedPayload);
-  const record = removeEmptyFields({
+  const record = {
     teacher_id: teacherId,
     class_id: cleanedPayload.classId || cleanedPayload.class_id || null,
     title: cleanedPayload.title.trim(),
     description: trimToLimit(cleanedPayload.description, DESCRIPTION_MAX_CHARS),
     content_type: contentType,
-    file_url: primaryFileUrl,
-  });
+    file_url: primaryFileUrl || null,
+  };
   const metrics = getContentPayloadMetrics(cleanedPayload, {
     body: cleanedPayload.lessonNotes || cleanedPayload.lesson_notes || "",
     sections: [],
@@ -697,11 +739,25 @@ export async function createContent(payload) {
   console.log("content save payload metrics", metrics);
   logContentUploadStep("db insert payload metrics", metrics);
 
-  const { data, error: contentError } = await supabase
-    .from("contents")
-    .insert(record)
-    .select(CONTENT_LIST_SELECT)
-    .single();
+  console.log("contents insert payload", {
+    keys: Object.keys(record),
+    file_url: Boolean(record.file_url),
+    descriptionLength: record.description?.length || 0,
+  });
+  console.time("INSERT_CONTENTS");
+  let contentResponse;
+
+  try {
+    contentResponse = await supabase
+      .from("contents")
+      .insert(record)
+      .select(CONTENT_LIST_SELECT)
+      .single();
+  } finally {
+    console.timeEnd("INSERT_CONTENTS");
+  }
+
+  const { data, error: contentError } = contentResponse;
 
   if (contentError) {
     console.error("[content-upload] db insert error", {
@@ -715,10 +771,32 @@ export async function createContent(payload) {
   const detailRecord = buildContentDetailRecord(cleanedPayload, data.id);
   const detailMetrics = getContentPayloadMetrics(cleanedPayload, detailRecord);
   console.log("content detail payload metrics", detailMetrics);
+  console.log("content_details insert payload", {
+    keys: Object.keys(detailRecord),
+    content_id: detailRecord.content_id,
+    bodyLength: detailRecord.body.length,
+    sectionsCount: detailRecord.sections.length,
+    assignmentTitleLength: detailRecord.assignment_title.length,
+    assignmentInstructionsLength: detailRecord.assignment_instructions.length,
+  });
 
-  const { error: detailError } = await supabase
-    .from("content_details")
-    .insert(detailRecord);
+  console.time("INSERT_CONTENT_DETAILS");
+  let detailResponse;
+
+  try {
+    detailResponse = await withSlowDetailsWarning(
+      supabase.from("content_details").insert(detailRecord),
+      {
+        contentId: data.id,
+        bodyLength: detailRecord.body.length,
+        sectionsCount: detailRecord.sections.length,
+      }
+    );
+  } finally {
+    console.timeEnd("INSERT_CONTENT_DETAILS");
+  }
+
+  const { error: detailError } = detailResponse;
 
   if (detailError) {
     console.error("[content-upload] detail insert error", {
@@ -738,28 +816,37 @@ export async function createContent(payload) {
 export async function updateContent(id, payload) {
   assertSupabaseConfig();
 
-  const cleanedPayload = removeEmptyFields(payload);
+  const cleanedPayload = payload || {};
   const contentType = inferContentType(cleanedPayload);
   const primaryFileUrl = getPrimaryFileUrl(cleanedPayload);
-  const record = removeEmptyFields({
+  const record = {
     class_id: cleanedPayload.classId || cleanedPayload.class_id || null,
     title: cleanedPayload.title.trim(),
     description: trimToLimit(cleanedPayload.description, DESCRIPTION_MAX_CHARS),
     content_type: contentType,
-    file_url: primaryFileUrl,
-  });
+    file_url: primaryFileUrl || null,
+  };
   const detailRecord = buildContentDetailRecord(cleanedPayload, id);
   const metrics = getContentPayloadMetrics(cleanedPayload, detailRecord);
 
   console.log("content save payload metrics", { id, ...metrics });
   logContentUploadStep("db update payload metrics", { id, ...metrics });
 
-  const { data, error: contentError } = await supabase
-    .from("contents")
-    .update(record)
-    .eq("id", id)
-    .select(CONTENT_LIST_SELECT)
-    .single();
+  console.time("INSERT_CONTENTS");
+  let contentResponse;
+
+  try {
+    contentResponse = await supabase
+      .from("contents")
+      .update(record)
+      .eq("id", id)
+      .select(CONTENT_LIST_SELECT)
+      .single();
+  } finally {
+    console.timeEnd("INSERT_CONTENTS");
+  }
+
+  const { data, error: contentError } = contentResponse;
 
   if (contentError) {
     console.error("[content-upload] db update error", {
@@ -771,9 +858,25 @@ export async function updateContent(id, payload) {
   }
 
   console.log("content metadata update done", { id: data.id });
-  const { error: detailError } = await supabase
-    .from("content_details")
-    .upsert(detailRecord, { onConflict: "content_id" });
+  console.time("INSERT_CONTENT_DETAILS");
+  let detailResponse;
+
+  try {
+    detailResponse = await withSlowDetailsWarning(
+      supabase.from("content_details").upsert(detailRecord, {
+        onConflict: "content_id",
+      }),
+      {
+        contentId: id,
+        bodyLength: detailRecord.body.length,
+        sectionsCount: detailRecord.sections.length,
+      }
+    );
+  } finally {
+    console.timeEnd("INSERT_CONTENT_DETAILS");
+  }
+
+  const { error: detailError } = detailResponse;
 
   if (detailError) {
     console.error("[content-upload] detail upsert error", {

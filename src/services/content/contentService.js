@@ -7,9 +7,9 @@ const AUDIO_MAX_BYTES = 20 * 1024 * 1024;
 const IMAGE_MAX_DIMENSION = 1600;
 const IMAGE_QUALITY = 0.82;
 const DESCRIPTION_MAX_CHARS = 1000;
-const LESSON_NOTES_MAX_CHARS = 12000;
-const SECTION_BODY_MAX_CHARS = 2400;
-const MAX_METADATA_SECTIONS = 5;
+const LESSON_NOTES_MAX_CHARS = 50000;
+const SECTION_BODY_MAX_CHARS = 3000;
+const MAX_METADATA_SECTIONS = 30;
 const ASSIGNMENT_TITLE_MAX_CHARS = 200;
 const ASSIGNMENT_INSTRUCTIONS_MAX_CHARS = 2000;
 const CONTENT_LIST_SELECT =
@@ -684,21 +684,19 @@ export async function uploadContentFiles(files = {}, options = {}) {
     message: "Uploading files to Supabase Storage...",
   });
 
-  let entries;
+  const entries = [];
 
   try {
-    entries = await Promise.all(
-      preparedQueue.map(async (item) => {
-        const publicUrl = await uploadContentFile(item.file, userId);
-        completed += 1;
-        onProgress({
-          percent: 30 + Math.round((completed / preparedQueue.length) * 50),
-          message: `${completed}/${preparedQueue.length} file upload complete.`,
-        });
+    for (const item of preparedQueue) {
+      const publicUrl = await uploadContentFile(item.file, userId);
+      completed += 1;
+      onProgress({
+        percent: 30 + Math.round((completed / preparedQueue.length) * 50),
+        message: `${completed}/${preparedQueue.length} file upload complete.`,
+      });
 
-        return [item.key, publicUrl];
-      })
-    );
+      entries.push([item.key, publicUrl]);
+    }
   } catch (error) {
     console.error("Content files upload flow failed:", error);
     throw error;

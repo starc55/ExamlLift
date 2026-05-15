@@ -7,7 +7,6 @@ const AUDIO_MAX_BYTES = 20 * 1024 * 1024;
 const IMAGE_MAX_DIMENSION = 1600;
 const IMAGE_QUALITY = 0.82;
 const DESCRIPTION_MAX_CHARS = 1000;
-const TEXT_CONTENT_MAX_CHARS = 15000;
 const LESSON_NOTES_MAX_CHARS = 12000;
 const SECTION_BODY_MAX_CHARS = 2400;
 const MAX_METADATA_SECTIONS = 5;
@@ -16,6 +15,8 @@ const ASSIGNMENT_INSTRUCTIONS_MAX_CHARS = 2000;
 const CONTENT_LIST_SELECT =
   "id,title,description,content_type,file_url,class_id,teacher_id,created_at";
 const CONTENT_DETAILS_SELECT = `${CONTENT_LIST_SELECT},text_content,profiles:teacher_id(full_name)`;
+const CONTENT_DETAIL_ROW_SELECT =
+  "body,sections,assignment_title,assignment_instructions";
 
 const SUPPORTED_TYPES = {
   image: ["image/jpeg", "image/png", "image/webp"],
@@ -119,7 +120,9 @@ function normalizeContentType(contentType = "text") {
 }
 
 function trimToLimit(value, maxChars) {
-  return String(value || "").trim().slice(0, maxChars);
+  return String(value || "")
+    .trim()
+    .slice(0, maxChars);
 }
 
 function chunkText(text, maxChars) {
@@ -140,7 +143,9 @@ function chunkText(text, maxChars) {
 }
 
 function normalizeMetadataSections(payload) {
-  const sourceSections = Array.isArray(payload.sections) ? payload.sections : [];
+  const sourceSections = Array.isArray(payload.sections)
+    ? payload.sections
+    : [];
 
   if (sourceSections.length) {
     return sourceSections
@@ -180,40 +185,7 @@ function normalizeMetadataSections(payload) {
 }
 
 function serializeContentMetadata(metadata) {
-  const cleanedMetadata = removeEmptyFields(metadata);
-  const serialized = JSON.stringify(cleanedMetadata);
-
-  if (serialized.length <= TEXT_CONTENT_MAX_CHARS) {
-    return serialized;
-  }
-
-  const compactMetadata = {
-    ...cleanedMetadata,
-    s: (cleanedMetadata.s || []).map((section) =>
-      trimToLimit(section, 1800)
-    ),
-    ai: trimToLimit(cleanedMetadata.ai, 1200),
-  };
-  const compactSerialized = JSON.stringify(removeEmptyFields(compactMetadata));
-
-  if (compactSerialized.length <= TEXT_CONTENT_MAX_CHARS) {
-    return compactSerialized;
-  }
-
-  return JSON.stringify(
-    removeEmptyFields({
-      v: 2,
-      c: compactMetadata.c,
-      l: compactMetadata.l,
-      d: compactMetadata.d,
-      a: compactMetadata.a,
-      s: (compactMetadata.s || []).map((section) =>
-        trimToLimit(section, 1400)
-      ),
-      at: trimToLimit(compactMetadata.at, 160),
-      ai: trimToLimit(compactMetadata.ai, 700),
-    })
-  );
+  return JSON.stringify(removeEmptyFields(metadata));
 }
 
 function buildAssetMetadata(payload, primaryFileUrl) {
@@ -235,21 +207,37 @@ function buildAssetMetadata(payload, primaryFileUrl) {
 
 function buildContentMetadata(payload, primaryFileUrl) {
   return removeEmptyFields({
-    v: 2,
+    v: 3,
     c: payload.category || "General English",
     l: payload.level || "Intermediate",
     d: payload.duration || "10 min",
     a: buildAssetMetadata(payload, primaryFileUrl),
-    s: normalizeMetadataSections(payload),
-    at: trimToLimit(
-      payload.assignmentTitle || `${payload.title} follow-up task`,
+  });
+}
+
+function buildContentDetailRecord(payload, contentId) {
+  const body = trimToLimit(
+    payload.body || payload.lessonNotes || payload.lesson_notes || "",
+    LESSON_NOTES_MAX_CHARS
+  );
+
+  return removeEmptyFields({
+    content_id: contentId,
+    body,
+    sections: [],
+    assignment_title: trimToLimit(
+      payload.assignmentTitle ||
+        payload.assignment_title ||
+        `${payload.title} follow-up task`,
       ASSIGNMENT_TITLE_MAX_CHARS
     ),
-    ai: trimToLimit(
+    assignment_instructions: trimToLimit(
       payload.assignmentInstructions ||
+        payload.assignment_instructions ||
         "Upload your completed task or reflection for teacher review.",
       ASSIGNMENT_INSTRUCTIONS_MAX_CHARS
     ),
+    updated_at: new Date().toISOString(),
   });
 }
 
@@ -328,11 +316,14 @@ function getPrimaryFileUrl(payload) {
   );
 }
 
-function getContentPayloadMetrics(payload, metadata, textContent) {
+function getContentPayloadMetrics(payload, metadata, detailsRecord) {
   return {
     payloadSize: getJsonSize(payload),
-    textContentLength: textContent.length,
-    sectionsCount: Array.isArray(metadata.s) ? metadata.s.length : 0,
+    metadataSize: getJsonSize(metadata),
+    bodyLength: String(detailsRecord.body || "").length,
+    sectionsCount: Array.isArray(detailsRecord.sections)
+      ? detailsRecord.sections.length
+      : 0,
     lessonNotesLength: String(payload.lessonNotes || payload.lesson_notes || "")
       .length,
   };
@@ -377,14 +368,25 @@ function mapContentListItem(row) {
   };
 }
 
-function mapContentDetails(row) {
+function mapContentDetails(row, detailRow = null) {
   if (!row) {
     return null;
   }
 
   const metadata = parseContentMetadata(row.text_content);
   const assets = getMetadataAssets(metadata);
-  const sections = normalizeParsedSections(metadata, row.description);
+  const body = detailRow?.body || "";
+  const detailSections = Array.isArray(detailRow?.sections)
+    ? detailRow.sections
+    : [];
+  const sections = detailSections.length
+    ? normalizeParsedSections({ sections: detailSections }, body)
+    : body
+      ? normalizeParsedSections(
+          { s: normalizeMetadataSections({ lessonNotes: body }) },
+          body
+        )
+      : normalizeParsedSections(metadata, row.description);
 
   return {
     id: row.id,
@@ -411,11 +413,14 @@ function mapContentDetails(row) {
     pdfUrl: assets.pdfUrl || (row.content_type === "pdf" ? row.file_url : ""),
     videoUrl:
       assets.videoUrl || (row.content_type === "video" ? row.file_url : ""),
+    body,
     sections,
     assignmentTitle:
+      detailRow?.assignment_title ||
       getMetadataValue(metadata, "at", "assignmentTitle") ||
       `${row.title} follow-up task`,
     assignmentInstructions:
+      detailRow?.assignment_instructions ||
       getMetadataValue(metadata, "ai", "assignmentInstructions") ||
       "Review this content and complete the assigned homework.",
     createdAt: row.created_at,
@@ -743,31 +748,52 @@ export async function createContent(payload) {
     file_url: primaryFileUrl,
     text_content: textContent,
   });
-  const metrics = getContentPayloadMetrics(
-    cleanedPayload,
-    metadata,
-    textContent
-  );
+  const metrics = getContentPayloadMetrics(cleanedPayload, metadata, {
+    body: cleanedPayload.lessonNotes || cleanedPayload.lesson_notes || "",
+    sections: [],
+  });
 
   console.log("content save payload metrics", metrics);
   logContentUploadStep("db insert payload metrics", metrics);
 
-  const { data, error } = await supabase
+  const { data, error: contentError } = await supabase
     .from("contents")
     .insert(record)
     .select(CONTENT_LIST_SELECT)
     .single();
 
-  if (error) {
+  if (contentError) {
     console.error("[content-upload] db insert error", {
       record: {
         ...record,
         text_content: undefined,
         text_content_length: record.text_content.length,
       },
-      error,
+      error: contentError,
     });
-    throw error;
+    throw contentError;
+  }
+
+  const detailRecord = buildContentDetailRecord(cleanedPayload, data.id);
+  const detailMetrics = getContentPayloadMetrics(
+    cleanedPayload,
+    metadata,
+    detailRecord
+  );
+  console.log("content detail payload metrics", detailMetrics);
+
+  const { error: detailError } = await supabase
+    .from("content_details")
+    .insert(detailRecord);
+
+  if (detailError) {
+    console.error("[content-upload] detail insert error", {
+      contentId: data.id,
+      body_length: detailRecord.body?.length || 0,
+      sections_count: detailRecord.sections?.length || 0,
+      error: detailError,
+    });
+    throw detailError;
   }
 
   logContentUploadStep("db insert success", { id: data.id });
@@ -790,23 +816,20 @@ export async function updateContent(id, payload) {
     file_url: primaryFileUrl,
     text_content: textContent,
   });
-  const metrics = getContentPayloadMetrics(
-    cleanedPayload,
-    metadata,
-    textContent
-  );
+  const detailRecord = buildContentDetailRecord(cleanedPayload, id);
+  const metrics = getContentPayloadMetrics(cleanedPayload, metadata, detailRecord);
 
   console.log("content save payload metrics", { id, ...metrics });
   logContentUploadStep("db update payload metrics", { id, ...metrics });
 
-  const { data, error } = await supabase
+  const { data, error: contentError } = await supabase
     .from("contents")
     .update(record)
     .eq("id", id)
     .select(CONTENT_LIST_SELECT)
     .single();
 
-  if (error) {
+  if (contentError) {
     console.error("[content-upload] db update error", {
       id,
       record: {
@@ -814,9 +837,23 @@ export async function updateContent(id, payload) {
         text_content: undefined,
         text_content_length: record.text_content.length,
       },
-      error,
+      error: contentError,
     });
-    throw error;
+    throw contentError;
+  }
+
+  const { error: detailError } = await supabase
+    .from("content_details")
+    .upsert(detailRecord, { onConflict: "content_id" });
+
+  if (detailError) {
+    console.error("[content-upload] detail upsert error", {
+      contentId: id,
+      body_length: detailRecord.body?.length || 0,
+      sections_count: detailRecord.sections?.length || 0,
+      error: detailError,
+    });
+    throw detailError;
   }
 
   logContentUploadStep("db update success", { id: data.id });
@@ -847,17 +884,31 @@ export async function getContentList(options = {}) {
 export async function getContentDetails(contentId) {
   assertSupabaseConfig();
 
-  const { data, error } = await supabase
-    .from("contents")
-    .select(CONTENT_DETAILS_SELECT)
-    .eq("id", contentId)
-    .maybeSingle();
+  const [contentResponse, detailResponse] = await Promise.all([
+    supabase
+      .from("contents")
+      .select(CONTENT_DETAILS_SELECT)
+      .eq("id", contentId)
+      .maybeSingle(),
+    supabase
+      .from("content_details")
+      .select(CONTENT_DETAIL_ROW_SELECT)
+      .eq("content_id", contentId)
+      .maybeSingle(),
+  ]);
 
-  if (error) {
-    throw error;
+  if (contentResponse.error) {
+    throw contentResponse.error;
   }
 
-  return mapContentDetails(data);
+  if (
+    detailResponse.error &&
+    detailResponse.error.code !== "PGRST116"
+  ) {
+    throw detailResponse.error;
+  }
+
+  return mapContentDetails(contentResponse.data, detailResponse.data);
 }
 
 export async function getAllContent() {

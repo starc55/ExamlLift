@@ -40,6 +40,17 @@ create table if not exists public.contents (
   created_at timestamptz default now()
 );
 
+create table if not exists public.content_details (
+  id uuid primary key default gen_random_uuid(),
+  content_id uuid not null unique references public.contents(id) on delete cascade,
+  body text,
+  sections jsonb default '[]'::jsonb,
+  assignment_title text,
+  assignment_instructions text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 create table if not exists public.tests (
   id uuid primary key default gen_random_uuid(),
   teacher_id uuid references public.profiles(id) on delete cascade,
@@ -213,6 +224,7 @@ alter table public.profiles enable row level security;
 alter table public.classes enable row level security;
 alter table public.class_students enable row level security;
 alter table public.contents enable row level security;
+alter table public.content_details enable row level security;
 alter table public.tests enable row level security;
 alter table public.homeworks enable row level security;
 alter table public.homework_submissions enable row level security;
@@ -334,6 +346,82 @@ create policy "contents_delete_teacher"
 on public.contents for delete
 to authenticated
 using (teacher_id = auth.uid() or public.is_admin());
+
+drop policy if exists "content_details_select_visible" on public.content_details;
+create policy "content_details_select_visible"
+on public.content_details for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.contents c
+    where c.id = content_details.content_id
+      and (
+        c.teacher_id = auth.uid()
+        or public.is_student_in_class(c.class_id)
+        or public.is_admin()
+      )
+  )
+);
+
+drop policy if exists "content_details_insert_teacher" on public.content_details;
+create policy "content_details_insert_teacher"
+on public.content_details for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.contents c
+    where c.id = content_id
+      and (
+        c.teacher_id = auth.uid()
+        or public.is_admin()
+      )
+  )
+);
+
+drop policy if exists "content_details_update_teacher" on public.content_details;
+create policy "content_details_update_teacher"
+on public.content_details for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.contents c
+    where c.id = content_details.content_id
+      and (
+        c.teacher_id = auth.uid()
+        or public.is_admin()
+      )
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.contents c
+    where c.id = content_id
+      and (
+        c.teacher_id = auth.uid()
+        or public.is_admin()
+      )
+  )
+);
+
+drop policy if exists "content_details_delete_teacher" on public.content_details;
+create policy "content_details_delete_teacher"
+on public.content_details for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.contents c
+    where c.id = content_details.content_id
+      and (
+        c.teacher_id = auth.uid()
+        or public.is_admin()
+      )
+  )
+);
 
 drop policy if exists "tests_select_visible" on public.tests;
 create policy "tests_select_visible"

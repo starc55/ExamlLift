@@ -66,7 +66,8 @@ const contentToForm = (item) => ({
   level: item.level || "Intermediate",
   duration: item.duration || "15 min",
   description: item.description || "",
-  lessonNotes: (item.sections || []).map((section) => section.body).join("\n"),
+  lessonNotes:
+    item.body || (item.sections || []).map((section) => section.body).join("\n"),
   assignmentTitle: item.assignmentTitle || "",
   assignmentInstructions: item.assignmentInstructions || "",
   imageUrl: item.imageUrl || "",
@@ -170,15 +171,6 @@ function TeacherUploadContentPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const refreshContentList = useCallback(async () => {
-    try {
-      const nextContent = await getContentList();
-      setContentItems(nextContent.slice(0, 6));
-    } catch (requestError) {
-      console.error("Content list refresh failed:", requestError);
-    }
-  }, []);
-
   const refreshHomeworkSubmissions = useCallback(async () => {
     try {
       const nextSubmissions = await getAllHomeworkSubmissions();
@@ -221,7 +213,21 @@ function TeacherUploadContentPage() {
       return;
     }
 
-    console.time("saveContent");
+    const activeTimers = new Set();
+    const startTimer = (label) => {
+      activeTimers.add(label);
+      console.time(label);
+    };
+    const endTimer = (label) => {
+      if (!activeTimers.has(label)) {
+        return;
+      }
+
+      activeTimers.delete(label);
+      console.timeEnd(label);
+    };
+
+    startTimer("SAVE_TOTAL");
     submitLockRef.current = true;
     setStatusMessage("");
     setStatusTone("success");
@@ -229,7 +235,6 @@ function TeacherUploadContentPage() {
     setUploadProgress({ percent: 0, message: "" });
     setIsSubmitting(true);
     let savingCleared = false;
-    let saveTimerEnded = false;
     const clearSavingState = () => {
       if (savingCleared) {
         return;
@@ -239,24 +244,21 @@ function TeacherUploadContentPage() {
       submitLockRef.current = false;
       setIsSubmitting(false);
       console.log("saving false");
-    };
-    const finishSaveTiming = () => {
-      if (saveTimerEnded) {
-        return;
-      }
-
-      saveTimerEnded = true;
-      console.timeEnd("saveContent");
+      console.log("setSaving false done");
     };
 
     try {
+      startTimer("VALIDATION");
       if (!form.classId) {
         throw new Error("Avval class yarating yoki class tanlang.");
       }
       if (!currentUserId) {
         throw new Error("Teacher account not found. Please log in again.");
       }
+      endTimer("VALIDATION");
+      console.log("validation done");
 
+      startTimer("FILE_UPLOAD");
       const { imageUrl, audioUrl, pdfUrl } = await uploadContentFiles(files, {
         userId: currentUserId,
         onProgress: (progress) => {
@@ -264,13 +266,21 @@ function TeacherUploadContentPage() {
           setStatusMessage(progress.message);
         },
       });
+      endTimer("FILE_UPLOAD");
       console.log("content upload done");
+      console.log("upload done");
+      console.log("public url done", {
+        image: Boolean(imageUrl),
+        audio: Boolean(audioUrl),
+        pdf: Boolean(pdfUrl),
+      });
 
       setStatusMessage("Content metadata databasega saqlanmoqda...");
       setUploadProgress({
         percent: 88,
         message: "Content metadata databasega saqlanmoqda...",
       });
+      startTimer("DB_INSERT");
       const cleanedPayload = removeEmptyFields({
         title: form.title,
         classId: form.classId,
@@ -291,10 +301,11 @@ function TeacherUploadContentPage() {
         lessonNotesLength: cleanedPayload.lessonNotes?.length || 0,
       });
       const savedContent = await createContent(cleanedPayload);
+      endTimer("DB_INSERT");
       console.log("content insert done");
+      console.log("db insert done");
 
       clearSavingState();
-      finishSaveTiming();
       setStatusTone("success");
       setStatusMessage("Content saved successfully");
       setForm({ ...initialForm, classId: form.classId || classes[0]?.id || "" });
@@ -305,7 +316,10 @@ function TeacherUploadContentPage() {
         percent: 100,
         message: "Upload complete.",
       });
-      void refreshContentList();
+      startTimer("AFTER_SAVE_REFRESH");
+      console.log("after-save refresh skipped");
+      endTimer("AFTER_SAVE_REFRESH");
+      console.log("refresh done");
     } catch (requestError) {
       console.error("Teacher content save failed:", requestError);
       setStatusTone("error");
@@ -317,10 +331,14 @@ function TeacherUploadContentPage() {
         message: "",
       });
     } finally {
+      endTimer("VALIDATION");
+      endTimer("FILE_UPLOAD");
+      endTimer("DB_INSERT");
+      endTimer("AFTER_SAVE_REFRESH");
       clearSavingState();
-      finishSaveTiming();
+      endTimer("SAVE_TOTAL");
     }
-  }, [classes, currentUserId, files, form, refreshContentList]);
+  }, [classes, currentUserId, files, form]);
 
   const handleFileChange = useCallback((field, file) => {
     setStatusMessage("");

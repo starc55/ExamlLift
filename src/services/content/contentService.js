@@ -186,6 +186,15 @@ function buildContentDetailRecord(payload, contentId) {
   };
 }
 
+function hasContentDetails(detailRecord) {
+  return Boolean(
+    detailRecord.body ||
+      detailRecord.sections.length ||
+      detailRecord.assignment_title ||
+      detailRecord.assignment_instructions
+  );
+}
+
 function normalizeDetailSections(sections) {
   if (!Array.isArray(sections)) {
     return [];
@@ -367,11 +376,11 @@ function mapContentDetails(row, detailRow = null) {
   const sections = detailSections.length
     ? normalizeParsedSections({ sections: detailSections }, body)
     : body
-      ? normalizeParsedSections(
-          { s: normalizeMetadataSections({ lessonNotes: body }) },
-          body
-        )
-      : normalizeParsedSections({}, row.description);
+    ? normalizeParsedSections(
+        { s: normalizeMetadataSections({ lessonNotes: body }) },
+        body
+      )
+    : normalizeParsedSections({}, row.description);
 
   return {
     id: row.id,
@@ -390,18 +399,14 @@ function mapContentDetails(row, detailRow = null) {
     duration: row.created_at
       ? new Date(row.created_at).toLocaleDateString()
       : "Recent",
-    imageUrl:
-      row.content_type === "image" ? row.file_url || "" : "",
-    audioUrl:
-      row.content_type === "audio" ? row.file_url || "" : "",
+    imageUrl: row.content_type === "image" ? row.file_url || "" : "",
+    audioUrl: row.content_type === "audio" ? row.file_url || "" : "",
     pdfUrl: row.content_type === "pdf" ? row.file_url || "" : "",
-    videoUrl:
-      row.content_type === "video" ? row.file_url || "" : "",
+    videoUrl: row.content_type === "video" ? row.file_url || "" : "",
     body,
     sections,
     assignmentTitle:
-      detailRow?.assignment_title ||
-      `${row.title} follow-up task`,
+      detailRow?.assignment_title || `${row.title} follow-up task`,
     assignmentInstructions:
       detailRow?.assignment_instructions ||
       "Review this content and complete the assigned homework.",
@@ -765,6 +770,16 @@ export async function createContent(payload) {
   const detailRecord = buildContentDetailRecord(cleanedPayload, data.id);
   const detailMetrics = getContentPayloadMetrics(cleanedPayload, detailRecord);
   console.log("content detail payload metrics", detailMetrics);
+
+  if (!hasContentDetails(detailRecord)) {
+    console.log("content_details insert skipped", {
+      contentId: data.id,
+      reason: "empty details",
+    });
+    logContentUploadStep("db insert success", { id: data.id });
+    return mapContentListItem(data);
+  }
+
   console.log("content_details insert payload", {
     keys: Object.keys(detailRecord),
     content_id: detailRecord.content_id,
@@ -852,6 +867,16 @@ export async function updateContent(id, payload) {
   }
 
   console.log("content metadata update done", { id: data.id });
+
+  if (!hasContentDetails(detailRecord)) {
+    console.log("content_details update skipped", {
+      contentId: id,
+      reason: "empty details",
+    });
+    logContentUploadStep("db update success", { id: data.id });
+    return mapContentListItem(data);
+  }
+
   console.time("INSERT_CONTENT_DETAILS");
   let detailResponse;
 
@@ -928,10 +953,7 @@ export async function getContentDetails(contentId) {
     throw contentResponse.error;
   }
 
-  if (
-    detailResponse.error &&
-    detailResponse.error.code !== "PGRST116"
-  ) {
+  if (detailResponse.error && detailResponse.error.code !== "PGRST116") {
     throw detailResponse.error;
   }
 

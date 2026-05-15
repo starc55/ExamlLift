@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { flushSync } from "react-dom";
 import {
   FaChalkboardUser,
   FaChevronDown,
@@ -164,7 +163,6 @@ function TeacherUploadContentPage() {
   const contentDetailsCacheRef = useRef(new Map());
   const previewRequestRef = useRef(null);
   const [form, setForm] = useState(initialForm);
-  const [uploadFormKey, setUploadFormKey] = useState(0);
   const [files, setFiles] = useState({ image: null, audio: null, pdf: null });
   const [classes, setClasses] = useState([]);
   const [submissions, setSubmissions] = useState([]);
@@ -250,20 +248,6 @@ function TeacherUploadContentPage() {
     setError("");
     setUploadProgress({ percent: 0, message: "" });
     setIsSubmitting(true);
-    let savingCleared = false;
-    const clearSavingState = () => {
-      if (savingCleared) {
-        return;
-      }
-
-      savingCleared = true;
-      submitLockRef.current = false;
-      flushSync(() => {
-        setIsSubmitting(false);
-      });
-      console.log("saving false");
-      console.log("setSaving false done");
-    };
 
     try {
       startTimer("VALIDATION");
@@ -323,12 +307,10 @@ function TeacherUploadContentPage() {
       console.log("db insert done");
 
       startTimer("SET_SUCCESS_STATE");
-      clearSavingState();
       setStatusTone("success");
       setStatusMessage("Content saved successfully");
       setForm({ ...initialForm, classId: form.classId || classes[0]?.id || "" });
       setFiles({ image: null, audio: null, pdf: null });
-      setUploadFormKey((current) => current + 1);
       setContentItems((current) => [savedContent, ...current].slice(0, 6));
       setUploadProgress({
         percent: 100,
@@ -356,7 +338,10 @@ function TeacherUploadContentPage() {
       endTimer("DB_INSERT");
       endTimer("SET_SUCCESS_STATE");
       endTimer("AFTER_SAVE_REFRESH");
-      clearSavingState();
+      submitLockRef.current = false;
+      setIsSubmitting(false);
+      console.log("saving false");
+      console.log("setSaving false done");
       endTimer("SAVE_TOTAL");
     }
   }, [classes, currentUserId, files, form]);
@@ -617,7 +602,6 @@ function TeacherUploadContentPage() {
       </section>
 
       <UploadForm
-        key={uploadFormKey}
         form={form}
         onChange={handleFormChange}
         onFileChange={handleFileChange}

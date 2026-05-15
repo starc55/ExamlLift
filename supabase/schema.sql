@@ -33,8 +33,8 @@ create table if not exists public.contents (
   teacher_id uuid references public.profiles(id) on delete cascade,
   class_id uuid references public.classes(id) on delete cascade,
   title text not null,
-  description text,
-  content_type text check (content_type in ('text', 'pdf', 'audio', 'image', 'video')),
+  description text default '',
+  content_type text default 'text' check (content_type in ('text', 'pdf', 'audio', 'image', 'video')),
   file_url text,
   created_at timestamptz default now()
 );
@@ -42,13 +42,21 @@ create table if not exists public.contents (
 create table if not exists public.content_details (
   id uuid primary key default gen_random_uuid(),
   content_id uuid not null unique references public.contents(id) on delete cascade,
-  body text,
+  body text default '',
   sections jsonb default '[]'::jsonb,
-  assignment_title text,
-  assignment_instructions text,
+  assignment_title text default '',
+  assignment_instructions text default '',
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+alter table public.contents drop column if exists text_content;
+alter table public.contents alter column description set default '';
+alter table public.contents alter column content_type set default 'text';
+alter table public.content_details alter column body set default '';
+alter table public.content_details alter column sections set default '[]'::jsonb;
+alter table public.content_details alter column assignment_title set default '';
+alter table public.content_details alter column assignment_instructions set default '';
 
 create table if not exists public.tests (
   id uuid primary key default gen_random_uuid(),

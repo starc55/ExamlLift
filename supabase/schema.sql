@@ -44,6 +44,7 @@ create table if not exists public.content_details (
   content_id uuid not null unique references public.contents(id) on delete cascade,
   body text default '',
   sections jsonb default '[]'::jsonb,
+  asset_urls jsonb default '{}'::jsonb,
   assignment_title text default '',
   assignment_instructions text default '',
   created_at timestamptz default now(),
@@ -55,6 +56,8 @@ alter table public.contents alter column description set default '';
 alter table public.contents alter column content_type set default 'text';
 alter table public.content_details alter column body set default '';
 alter table public.content_details alter column sections set default '[]'::jsonb;
+alter table public.content_details add column if not exists asset_urls jsonb default '{}'::jsonb;
+alter table public.content_details alter column asset_urls set default '{}'::jsonb;
 alter table public.content_details alter column assignment_title set default '';
 alter table public.content_details alter column assignment_instructions set default '';
 

@@ -261,13 +261,15 @@ function TeacherUploadContentPage() {
       console.log("validation done");
 
       startTimer("FILE_UPLOAD");
-      const { imageUrl, audioUrl, pdfUrl } = await uploadContentFiles(files, {
+      const uploadedUrls = await uploadContentFiles(files, {
         userId: currentUserId,
         onProgress: (progress) => {
           setUploadProgress(progress);
           setStatusMessage(progress.message);
         },
       });
+      console.log("content upload urls", uploadedUrls);
+      const { imageUrl, audioUrl, pdfUrl } = uploadedUrls;
       endTimer("FILE_UPLOAD");
       console.log("content upload done");
       console.log("upload done");

@@ -16,7 +16,7 @@ const CONTENT_LIST_SELECT =
   "id,title,description,content_type,file_url,class_id,teacher_id,created_at";
 const CONTENT_DETAILS_SELECT = `${CONTENT_LIST_SELECT},profiles:teacher_id(full_name)`;
 const CONTENT_DETAIL_ROW_SELECT =
-  "body,sections,assignment_title,assignment_instructions";
+  "body,sections,assignment_title,assignment_instructions,asset_urls";
 
 const SUPPORTED_TYPES = {
   image: ["image/jpeg", "image/png", "image/webp"],
@@ -175,6 +175,7 @@ function buildContentDetailRecord(payload, contentId) {
     content_id: contentId,
     body,
     sections: normalizeDetailSections(payload.sections),
+    asset_urls: getAssetUrls(payload),
     assignment_title: trimToLimit(
       payload.assignmentTitle ?? payload.assignment_title ?? "",
       ASSIGNMENT_TITLE_MAX_CHARS
@@ -190,9 +191,19 @@ function hasContentDetails(detailRecord) {
   return Boolean(
     detailRecord.body ||
       detailRecord.sections.length ||
+      Object.keys(detailRecord.asset_urls || {}).length ||
       detailRecord.assignment_title ||
       detailRecord.assignment_instructions
   );
+}
+
+function getAssetUrls(payload) {
+  return removeEmptyFields({
+    imageUrl: payload.imageUrl || payload.image_url || "",
+    pdfUrl: payload.pdfUrl || payload.pdf_url || "",
+    audioUrl: payload.audioUrl || payload.audio_url || "",
+    videoUrl: payload.videoUrl || payload.video_url || "",
+  });
 }
 
 function normalizeDetailSections(sections) {
@@ -325,12 +336,20 @@ function getContentPayloadMetrics(payload, detailsRecord) {
   };
 }
 
-function mapContentListItem(row) {
+function mapContentListItem(row, assetUrls = {}) {
   if (!row) {
     return null;
   }
 
   const contentType = row.content_type || "text";
+  const imageUrl =
+    assetUrls.imageUrl || (contentType === "image" ? row.file_url || "" : "");
+  const audioUrl =
+    assetUrls.audioUrl || (contentType === "audio" ? row.file_url || "" : "");
+  const pdfUrl =
+    assetUrls.pdfUrl || (contentType === "pdf" ? row.file_url || "" : "");
+  const videoUrl =
+    assetUrls.videoUrl || (contentType === "video" ? row.file_url || "" : "");
 
   return {
     id: row.id,
@@ -349,10 +368,10 @@ function mapContentListItem(row) {
     duration: row.created_at
       ? new Date(row.created_at).toLocaleDateString()
       : "Recent",
-    imageUrl: contentType === "image" ? row.file_url || "" : "",
-    audioUrl: contentType === "audio" ? row.file_url || "" : "",
-    pdfUrl: contentType === "pdf" ? row.file_url || "" : "",
-    videoUrl: contentType === "video" ? row.file_url || "" : "",
+    imageUrl,
+    audioUrl,
+    pdfUrl,
+    videoUrl,
     sections: [],
     assignmentTitle: "",
     assignmentInstructions: "",
@@ -370,6 +389,7 @@ function mapContentDetails(row, detailRow = null) {
   }
 
   const body = detailRow?.body || "";
+  const assetUrls = detailRow?.asset_urls || {};
   const detailSections = Array.isArray(detailRow?.sections)
     ? detailRow.sections
     : [];
@@ -399,10 +419,14 @@ function mapContentDetails(row, detailRow = null) {
     duration: row.created_at
       ? new Date(row.created_at).toLocaleDateString()
       : "Recent",
-    imageUrl: row.content_type === "image" ? row.file_url || "" : "",
-    audioUrl: row.content_type === "audio" ? row.file_url || "" : "",
-    pdfUrl: row.content_type === "pdf" ? row.file_url || "" : "",
-    videoUrl: row.content_type === "video" ? row.file_url || "" : "",
+    imageUrl:
+      assetUrls.imageUrl || (row.content_type === "image" ? row.file_url || "" : ""),
+    audioUrl:
+      assetUrls.audioUrl || (row.content_type === "audio" ? row.file_url || "" : ""),
+    pdfUrl:
+      assetUrls.pdfUrl || (row.content_type === "pdf" ? row.file_url || "" : ""),
+    videoUrl:
+      assetUrls.videoUrl || (row.content_type === "video" ? row.file_url || "" : ""),
     body,
     sections,
     assignmentTitle:
@@ -592,7 +616,7 @@ async function getCurrentUserId() {
   return data.user?.id;
 }
 
-export async function uploadContentFile(file, teacherId) {
+export async function uploadContentFile(file, teacherId, options = {}) {
   assertSupabaseConfig();
 
   if (!file) {
@@ -600,12 +624,22 @@ export async function uploadContentFile(file, teacherId) {
   }
 
   const ownerId = teacherId || (await getCurrentUserId());
-  const path = `${ownerId}/${Date.now()}-${safeFileName(file.name)}`;
-  const storagePath = `${CONTENT_BUCKET}/${path}`;
+  const uploadIndex = Number.isInteger(options.index) ? options.index : 0;
+  const kind = options.kind || "file";
+  const path = `${ownerId}/${Date.now()}-${uploadIndex}-${safeFileName(
+    file.name
+  )}`;
 
-  logContentUploadStep("selected file", getDebugFileInfo(file));
+  logContentUploadStep("selected file", {
+    kind,
+    index: uploadIndex,
+    ...getDebugFileInfo(file),
+  });
   logContentUploadStep("upload start", {
-    storagePath,
+    kind,
+    index: uploadIndex,
+    bucket: CONTENT_BUCKET,
+    path,
     contentType: file.type || "application/octet-stream",
   });
 
@@ -618,10 +652,11 @@ export async function uploadContentFile(file, teacherId) {
     });
 
   if (error) {
-    console.error("[content-upload] upload error", {
+    console.error("[content-upload] upload failed", {
+      kind,
+      index: uploadIndex,
       bucket: CONTENT_BUCKET,
       path,
-      storagePath,
       fileName: file.name,
       fileSize: file.size,
       fileType: file.type,
@@ -631,8 +666,17 @@ export async function uploadContentFile(file, teacherId) {
   }
 
   const { data } = supabase.storage.from(CONTENT_BUCKET).getPublicUrl(path);
-  logContentUploadStep("upload success", { storagePath });
-  logContentUploadStep("public URL", { publicUrl: data.publicUrl });
+  logContentUploadStep("upload success", {
+    kind,
+    index: uploadIndex,
+    bucket: CONTENT_BUCKET,
+    path,
+  });
+  logContentUploadStep("public URL generated", {
+    kind,
+    index: uploadIndex,
+    publicUrl: data.publicUrl,
+  });
 
   return data.publicUrl;
 }
@@ -655,29 +699,18 @@ export async function uploadContentFiles(files = {}, options = {}) {
     });
     return {
       imageUrl: "",
-      audioUrl: "",
       pdfUrl: "",
+      audioUrl: "",
     };
   }
 
-  onProgress({ percent: 10, message: "Validating files..." });
+  onProgress({ percent: 10, message: "Preparing files..." });
   logContentUploadStep("selected files", {
     files: uploadQueue.map((item) => ({
       kind: item.key,
       ...getDebugFileInfo(item.file),
     })),
   });
-  uploadQueue.forEach((item) => validateRawContentFile(item.file, item.key));
-
-  onProgress({ percent: 18, message: "Optimizing image if needed..." });
-  const preparedQueue = [];
-
-  for (const item of uploadQueue) {
-    preparedQueue.push({
-      ...item,
-      file: await prepareContentFile(item.file, item.key),
-    });
-  }
 
   let completed = 0;
   onProgress({
@@ -687,28 +720,55 @@ export async function uploadContentFiles(files = {}, options = {}) {
 
   const entries = [];
 
-  try {
-    for (const item of preparedQueue) {
-      const publicUrl = await uploadContentFile(item.file, userId);
+  for (let index = 0; index < uploadQueue.length; index += 1) {
+    const item = uploadQueue[index];
+
+    try {
+      logContentUploadStep("file validation start", {
+        kind: item.key,
+        index,
+        ...getDebugFileInfo(item.file),
+      });
+      validateRawContentFile(item.file, item.key);
+      logContentUploadStep("file validation done", {
+        kind: item.key,
+        index,
+      });
+
+      onProgress({
+        percent: 30 + Math.round((completed / uploadQueue.length) * 50),
+        message: `Uploading ${item.key} file...`,
+      });
+      const preparedFile = await prepareContentFile(item.file, item.key);
+      const publicUrl = await uploadContentFile(preparedFile, userId, {
+        index,
+        kind: item.key,
+      });
       completed += 1;
       onProgress({
-        percent: 30 + Math.round((completed / preparedQueue.length) * 50),
-        message: `${completed}/${preparedQueue.length} file upload complete.`,
+        percent: 30 + Math.round((completed / uploadQueue.length) * 50),
+        message: `${completed}/${uploadQueue.length} file upload complete.`,
       });
 
       entries.push([item.key, publicUrl]);
+    } catch (error) {
+      console.error("[content-upload] upload failed", {
+        kind: item.key,
+        index,
+        file: getDebugFileInfo(item.file),
+        error,
+      });
+      throw error;
     }
-  } catch (error) {
-    console.error("Content files upload flow failed:", error);
-    throw error;
   }
 
   const urls = Object.fromEntries(entries);
+  logContentUploadStep("all uploads complete", { urls });
 
   return {
     imageUrl: urls.image || "",
-    audioUrl: urls.audio || "",
     pdfUrl: urls.pdf || "",
+    audioUrl: urls.audio || "",
   };
 }
 
@@ -785,6 +845,7 @@ export async function createContent(payload) {
     content_id: detailRecord.content_id,
     bodyLength: detailRecord.body.length,
     sectionsCount: detailRecord.sections.length,
+    assetUrls: detailRecord.asset_urls,
     assignmentTitleLength: detailRecord.assignment_title.length,
     assignmentInstructionsLength: detailRecord.assignment_instructions.length,
   });
@@ -819,7 +880,7 @@ export async function createContent(payload) {
 
   console.log("content details insert done", { id: data.id });
   logContentUploadStep("db insert success", { id: data.id });
-  return mapContentListItem(data);
+  return mapContentListItem(data, detailRecord.asset_urls);
 }
 
 export async function updateContent(id, payload) {
@@ -909,7 +970,7 @@ export async function updateContent(id, payload) {
 
   console.log("content details update done", { id: data.id });
   logContentUploadStep("db update success", { id: data.id });
-  return mapContentListItem(data);
+  return mapContentListItem(data, detailRecord.asset_urls);
 }
 
 export async function getContentList(options = {}) {

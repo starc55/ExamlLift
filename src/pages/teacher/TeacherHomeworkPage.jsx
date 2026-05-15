@@ -34,36 +34,40 @@ function TeacherHomeworkPage() {
   const [pageLoading, setPageLoading] = useState(true);
   const [homeworkItems, setHomeworkItems] = useState([]);
 
-  useSafeAsyncEffect("teacher-homework", async ({ safeSet }) => {
-    safeSet(() => {
-      setPageLoading(true);
-      setError("");
-    });
+  useSafeAsyncEffect(
+    "teacher-homework",
+    async ({ safeSet }) => {
+      safeSet(() => {
+        setPageLoading(true);
+        setError("");
+      });
 
-    try {
-      const [nextClasses, nextHomework] = await Promise.all([
-        getTeacherClasses(),
-        getTeacherHomeworks(),
-      ]);
+      try {
+        const [nextClasses, nextHomework] = await Promise.all([
+          getTeacherClasses(),
+          getTeacherHomeworks(),
+        ]);
 
-      safeSet(() => {
-        setClasses(nextClasses);
-        setHomeworkItems(nextHomework);
-        setForm((current) => ({
-          ...current,
-          classId: current.classId || nextClasses[0]?.id || "",
-        }));
-      });
-    } catch (requestError) {
-      safeSet(() => {
-        setError(requestError.message);
-      });
-    } finally {
-      safeSet(() => {
-        setPageLoading(false);
-      });
-    }
-  }, []);
+        safeSet(() => {
+          setClasses(nextClasses);
+          setHomeworkItems(nextHomework);
+          setForm((current) => ({
+            ...current,
+            classId: current.classId || nextClasses[0]?.id || "",
+          }));
+        });
+      } catch (requestError) {
+        safeSet(() => {
+          setError(requestError.message);
+        });
+      } finally {
+        safeSet(() => {
+          setPageLoading(false);
+        });
+      }
+    },
+    []
+  );
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -76,7 +80,10 @@ function TeacherHomeworkPage() {
         throw new Error("Avval class tanlang.");
       }
 
-      const attachmentUrl = await uploadHomeworkFile(file, "homework-attachments");
+      const attachmentUrl = await uploadHomeworkFile(
+        file,
+        "homework-attachments"
+      );
       const correctAnswers = form.correctAnswersText.trim()
         ? JSON.parse(form.correctAnswersText)
         : null;
@@ -100,7 +107,10 @@ function TeacherHomeworkPage() {
       setFileName("");
       setStatusMessage("Homework Supabasega saqlandi.");
     } catch (requestError) {
-      setError(requestError.message || "Correct answers JSON noto'g'ri yoki faylni yuklashda xatolik bor.");
+      setError(
+        requestError.message ||
+          "Correct answers JSON noto'g'ri yoki faylni yuklashda xatolik bor."
+      );
     } finally {
       setLoading(false);
     }
@@ -109,9 +119,25 @@ function TeacherHomeworkPage() {
   return (
     <div className="page-stack">
       <section className="dashboard-grid dashboard-grid--compact">
-        <DashboardCard label="Homework tasks" value={homeworkItems.length} helper="Teacher-created tasks" />
-        <DashboardCard label="Objective types" value={homeworkItems.filter((item) => item.correctAnswers).length} helper="Local + AI blend" tone="info" />
-        <DashboardCard label="AI-enabled types" value={homeworkItems.filter((item) => item.type !== "file_homework").length} helper="Submit with AI support" tone="success" />
+        <DashboardCard
+          label="Homework tasks"
+          value={homeworkItems.length}
+          helper="Teacher-created tasks"
+        />
+        <DashboardCard
+          label="Objective types"
+          value={homeworkItems.filter((item) => item.correctAnswers).length}
+          helper="Local + AI blend"
+          tone="info"
+        />
+        <DashboardCard
+          label="AI-enabled types"
+          value={
+            homeworkItems.filter((item) => item.type !== "file_homework").length
+          }
+          helper="Submit with AI support"
+          tone="success"
+        />
       </section>
 
       {pageLoading ? <p className="empty-copy">Loading homework...</p> : null}
@@ -127,7 +153,12 @@ function TeacherHomeworkPage() {
             Class
             <select
               value={form.classId}
-              onChange={(event) => setForm((current) => ({ ...current, classId: event.target.value }))}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  classId: event.target.value,
+                }))
+              }
               required
             >
               <option value="">Select class</option>
@@ -142,7 +173,12 @@ function TeacherHomeworkPage() {
             Title
             <input
               value={form.title}
-              onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  title: event.target.value,
+                }))
+              }
               required
             />
           </label>
@@ -152,7 +188,10 @@ function TeacherHomeworkPage() {
               rows={5}
               value={form.instructions}
               onChange={(event) =>
-                setForm((current) => ({ ...current, instructions: event.target.value }))
+                setForm((current) => ({
+                  ...current,
+                  instructions: event.target.value,
+                }))
               }
               required
             />
@@ -161,7 +200,9 @@ function TeacherHomeworkPage() {
             Type
             <select
               value={form.type}
-              onChange={(event) => setForm((current) => ({ ...current, type: event.target.value }))}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, type: event.target.value }))
+              }
             >
               <option value="writing_homework">writing_homework</option>
               <option value="speaking_homework">speaking_homework</option>
@@ -176,7 +217,12 @@ function TeacherHomeworkPage() {
             Level
             <input
               value={form.level}
-              onChange={(event) => setForm((current) => ({ ...current, level: event.target.value }))}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  level: event.target.value,
+                }))
+              }
             />
           </label>
           <label>
@@ -184,7 +230,12 @@ function TeacherHomeworkPage() {
             <input
               type="date"
               value={form.deadline}
-              onChange={(event) => setForm((current) => ({ ...current, deadline: event.target.value }))}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  deadline: event.target.value,
+                }))
+              }
             />
           </label>
           <label>
@@ -193,7 +244,10 @@ function TeacherHomeworkPage() {
               rows={5}
               value={form.correctAnswersText}
               onChange={(event) =>
-                setForm((current) => ({ ...current, correctAnswersText: event.target.value }))
+                setForm((current) => ({
+                  ...current,
+                  correctAnswersText: event.target.value,
+                }))
               }
               placeholder='{"items":[{"id":"1","prompt":"Question 1","correctAnswer":"answer"}]}'
             />
@@ -211,13 +265,20 @@ function TeacherHomeworkPage() {
               }}
             />
             <div className="file-field__row">
-              <label htmlFor="teacher-homework-file" className="file-field__trigger">
+              <label
+                htmlFor="teacher-homework-file"
+                className="file-field__trigger"
+              >
                 Choose file
               </label>
-              <strong className="file-field__name">{fileName || "No file selected"}</strong>
+              <strong className="file-field__name">
+                {fileName || "No file selected"}
+              </strong>
             </div>
           </div>
-          {statusMessage ? <p className="success-text">{statusMessage}</p> : null}
+          {statusMessage ? (
+            <p className="success-text">{statusMessage}</p>
+          ) : null}
           <button className="primary-button" type="submit" disabled={loading}>
             {loading ? "Saving..." : "Create homework"}
           </button>
@@ -229,7 +290,10 @@ function TeacherHomeworkPage() {
           <p className="eyebrow">Homework library</p>
           <h2>Current homework tasks</h2>
         </div>
-        <Link to="/teacher/homework/submissions" className="secondary-button card-link">
+        <Link
+          to="/teacher/homework/submissions"
+          className="secondary-button card-link"
+        >
           Open submissions
         </Link>
       </section>

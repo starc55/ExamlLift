@@ -875,7 +875,7 @@ pre {
   transform: rotate(18deg);
 }
 
-.manage-tests-hero > * {
+.manage-tests-hero>* {
   position: relative;
   z-index: 1;
 }
@@ -1062,7 +1062,7 @@ pre {
   background: linear-gradient(180deg, rgba(255, 252, 248, 0.9), rgba(248, 236, 227, 0.8));
 }
 
-.manage-test-form__section > div:first-child p {
+.manage-test-form__section>div:first-child p {
   margin-bottom: 4px;
 }
 
@@ -1798,7 +1798,7 @@ pre {
   box-shadow: 0 18px 44px rgba(77, 12, 22, 0.08);
 }
 
-.teacher-content-item__footer > div {
+.teacher-content-item__footer>div {
   display: flex;
   align-items: center;
   gap: 8px;

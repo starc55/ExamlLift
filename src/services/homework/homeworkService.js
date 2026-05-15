@@ -157,7 +157,8 @@ export async function getHomeworkById(id) {
 export async function createHomework(payload) {
   assertSupabaseConfig();
 
-  const teacherId = payload.teacherId || payload.teacher_id || (await getCurrentUserId());
+  const teacherId =
+    payload.teacherId || payload.teacher_id || (await getCurrentUserId());
   const record = {
     teacher_id: teacherId,
     class_id: payload.classId || payload.class_id || null,
@@ -279,11 +280,13 @@ export function scoreObjectiveHomework(correctAnswers, answers) {
 export async function submitHomework(payload) {
   assertSupabaseConfig();
 
-  const studentId = payload.studentId || payload.student_id || (await getCurrentUserId());
+  const studentId =
+    payload.studentId || payload.student_id || (await getCurrentUserId());
   const record = {
     homework_id: payload.homeworkId || payload.homework_id,
     student_id: studentId,
-    answer_text: payload.answer || payload.answerText || payload.transcript || "",
+    answer_text:
+      payload.answer || payload.answerText || payload.transcript || "",
     file_url: payload.fileUrl || payload.file_url || "",
     audio_url: payload.audioUrl || payload.audio_url || "",
     score: payload.score ?? null,

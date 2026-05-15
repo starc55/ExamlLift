@@ -16,29 +16,35 @@ function TeacherHomeworkSubmissionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useSafeAsyncEffect("teacher-homework-submissions", async ({ safeSet }) => {
-    safeSet(() => {
-      setLoading(true);
-      setError("");
-    });
+  useSafeAsyncEffect(
+    "teacher-homework-submissions",
+    async ({ safeSet }) => {
+      safeSet(() => {
+        setLoading(true);
+        setError("");
+      });
 
-    try {
-      const data = await getAllHomeworkSubmissions();
-      safeSet(() => {
-        setSubmissions(data);
-      });
-    } catch (requestError) {
-      safeSet(() => {
-        setError(requestError.message);
-      });
-    } finally {
-      safeSet(() => {
-        setLoading(false);
-      });
-    }
-  }, []);
+      try {
+        const data = await getAllHomeworkSubmissions();
+        safeSet(() => {
+          setSubmissions(data);
+        });
+      } catch (requestError) {
+        safeSet(() => {
+          setError(requestError.message);
+        });
+      } finally {
+        safeSet(() => {
+          setLoading(false);
+        });
+      }
+    },
+    []
+  );
 
-  const studentOptions = [...new Set(submissions.map((item) => item.studentName))];
+  const studentOptions = [
+    ...new Set(submissions.map((item) => item.studentName)),
+  ];
   const filteredSubmissions = submissions.filter((submission) => {
     if (typeFilter !== "all" && submission.homeworkType !== typeFilter) {
       return false;
@@ -59,7 +65,10 @@ function TeacherHomeworkSubmissionsPage() {
           <h2>Student homework review queue</h2>
         </div>
         <div className="filter-row">
-          <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+          <select
+            value={typeFilter}
+            onChange={(event) => setTypeFilter(event.target.value)}
+          >
             <option value="all">All types</option>
             <option value="writing_homework">writing_homework</option>
             <option value="speaking_homework">speaking_homework</option>
@@ -69,7 +78,10 @@ function TeacherHomeworkSubmissionsPage() {
             <option value="listening_homework">listening_homework</option>
             <option value="file_homework">file_homework</option>
           </select>
-          <select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)}>
+          <select
+            value={studentFilter}
+            onChange={(event) => setStudentFilter(event.target.value)}
+          >
             <option value="all">All students</option>
             {studentOptions.map((studentName) => (
               <option key={studentName} value={studentName}>
@@ -140,8 +152,14 @@ function TeacherHomeworkSubmissionsPage() {
               band={selectedSubmission.band}
             />
             <CriteriaBreakdown criteria={selectedSubmission.criteria} />
-            <WrongAnswersList items={selectedSubmission.wrongAnswers} emptyText="Noto'g'ri javoblar yo'q." />
-            <FeedbackCard title="Homework AI feedback" feedback={selectedSubmission.feedback} />
+            <WrongAnswersList
+              items={selectedSubmission.wrongAnswers}
+              emptyText="Noto'g'ri javoblar yo'q."
+            />
+            <FeedbackCard
+              title="Homework AI feedback"
+              feedback={selectedSubmission.feedback}
+            />
           </div>
         ) : null}
       </Modal>

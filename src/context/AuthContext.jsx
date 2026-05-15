@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   assertSupabaseConfig,
   hasSupabaseConfig,
@@ -7,6 +14,8 @@ import {
 } from "../lib/supabaseClient";
 
 const AuthContext = createContext(null);
+const profileCache = new Map();
+const profileRequests = new Map();
 
 function normalizeProfile(profile, authUser = null) {
   if (!profile && !authUser) {
@@ -28,16 +37,43 @@ function normalizeProfile(profile, authUser = null) {
   };
 }
 
-async function fetchProfile(user) {
+async function fetchProfile(user, options = {}) {
   if (!user) {
     return null;
   }
 
   assertSupabaseConfig();
+  const force = Boolean(options.force);
 
+  if (!force && profileCache.has(user.id)) {
+    console.info("[auth] profile cache hit", { userId: user.id });
+    return normalizeProfile(profileCache.get(user.id), user);
+  }
+
+  if (!force && profileRequests.has(user.id)) {
+    console.info("[auth] profile request deduped", { userId: user.id });
+    return profileRequests.get(user.id);
+  }
+
+  console.info("[auth] profile fetch started", { userId: user.id });
+  const request = fetchProfileFromSupabase(user)
+    .then((profile) => {
+      profileCache.set(user.id, profile);
+      console.info("[auth] profile fetch finished", { userId: user.id });
+      return profile;
+    })
+    .finally(() => {
+      profileRequests.delete(user.id);
+    });
+
+  profileRequests.set(user.id, request);
+  return request;
+}
+
+async function fetchProfileFromSupabase(user) {
   const { data, error } = await supabase
     .from("profiles")
-    .select("*")
+    .select("id,full_name,email,role,created_at")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -60,7 +96,7 @@ async function fetchProfile(user) {
   const { data: insertedProfile, error: insertError } = await supabase
     .from("profiles")
     .insert(fallbackProfile)
-    .select("*")
+    .select("id,full_name,email,role,created_at")
     .single();
 
   if (insertError) {
@@ -79,7 +115,7 @@ export function AuthProvider({ children }) {
     hasSupabaseConfig ? "" : SUPABASE_ENV_ERROR_MESSAGE
   );
 
-  const loadSession = async () => {
+  const loadSession = useCallback(async () => {
     if (!hasSupabaseConfig) {
       setLoading(false);
       return;
@@ -109,7 +145,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -120,6 +156,9 @@ export function AuthProvider({ children }) {
         isMounted = false;
       };
     }
+
+    const initStartedAt = Date.now();
+    console.info("[auth] initial session request started");
 
     supabase.auth.getSession().then(async ({ data, error }) => {
       if (!isMounted) {
@@ -137,14 +176,27 @@ export function AuthProvider({ children }) {
       setUser(activeSession?.user || null);
 
       try {
-        setProfile(
-          activeSession?.user ? await fetchProfile(activeSession.user) : null
-        );
+        const nextProfile = activeSession?.user
+          ? await fetchProfile(activeSession.user)
+          : null;
+
+        if (!isMounted) {
+          return;
+        }
+
+        setProfile(nextProfile);
         setAuthError("");
       } catch (profileError) {
-        setAuthError(profileError.message);
+        if (isMounted) {
+          setAuthError(profileError.message);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          console.info("[auth] initial session request finished", {
+            elapsedMs: Date.now() - initStartedAt,
+          });
+          setLoading(false);
+        }
       }
     });
 
@@ -154,19 +206,33 @@ export function AuthProvider({ children }) {
           return;
         }
 
+        console.info("[auth] state changed", {
+          event: _event,
+          hasSession: Boolean(nextSession),
+        });
         setSession(nextSession);
         setUser(nextSession?.user || null);
 
         try {
-          setProfile(
-            nextSession?.user ? await fetchProfile(nextSession.user) : null
-          );
+          const nextProfile = nextSession?.user
+            ? await fetchProfile(nextSession.user)
+            : null;
+
+          if (!isMounted) {
+            return;
+          }
+
+          setProfile(nextProfile);
           setAuthError("");
         } catch (profileError) {
-          setProfile(null);
-          setAuthError(profileError.message);
+          if (isMounted) {
+            setProfile(null);
+            setAuthError(profileError.message);
+          }
         } finally {
-          setLoading(false);
+          if (isMounted) {
+            setLoading(false);
+          }
         }
       }
     );
@@ -187,7 +253,7 @@ export function AuthProvider({ children }) {
       authError,
       isAuthenticated: Boolean(user && profile),
       refreshProfile: async () => {
-        const nextProfile = await fetchProfile(user);
+        const nextProfile = await fetchProfile(user, { force: true });
         setProfile(nextProfile);
         return nextProfile;
       },
@@ -267,11 +333,15 @@ export function AuthProvider({ children }) {
 
         setSession(null);
         setUser(null);
+        if (user?.id) {
+          profileCache.delete(user.id);
+        }
+
         setProfile(null);
       },
       reloadSession: loadSession,
     }),
-    [authError, loading, profile, session, user]
+    [authError, loadSession, loading, profile, session, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import TestCard from "../../components/cards/TestCard";
@@ -10,6 +10,7 @@ import {
   getTeacherHomeworks,
   uploadHomeworkFile,
 } from "../../services/homework/homeworkService";
+import { useSafeAsyncEffect } from "../../hooks/useSafeAsyncEffect";
 
 const initialForm = {
   title: "",
@@ -33,30 +34,35 @@ function TeacherHomeworkPage() {
   const [pageLoading, setPageLoading] = useState(true);
   const [homeworkItems, setHomeworkItems] = useState([]);
 
-  const loadPageData = async () => {
-    setPageLoading(true);
-    setError("");
+  useSafeAsyncEffect("teacher-homework", async ({ safeSet }) => {
+    safeSet(() => {
+      setPageLoading(true);
+      setError("");
+    });
 
     try {
       const [nextClasses, nextHomework] = await Promise.all([
         getTeacherClasses(),
         getTeacherHomeworks(),
       ]);
-      setClasses(nextClasses);
-      setHomeworkItems(nextHomework);
-      setForm((current) => ({
-        ...current,
-        classId: current.classId || nextClasses[0]?.id || "",
-      }));
-    } catch (requestError) {
-      setError(requestError.message);
-    } finally {
-      setPageLoading(false);
-    }
-  };
 
-  useEffect(() => {
-    loadPageData();
+      safeSet(() => {
+        setClasses(nextClasses);
+        setHomeworkItems(nextHomework);
+        setForm((current) => ({
+          ...current,
+          classId: current.classId || nextClasses[0]?.id || "",
+        }));
+      });
+    } catch (requestError) {
+      safeSet(() => {
+        setError(requestError.message);
+      });
+    } finally {
+      safeSet(() => {
+        setPageLoading(false);
+      });
+    }
   }, []);
 
   const handleSubmit = async (event) => {
@@ -75,7 +81,7 @@ function TeacherHomeworkPage() {
         ? JSON.parse(form.correctAnswersText)
         : null;
 
-      await createHomework({
+      const createdHomework = await createHomework({
         title: form.title,
         classId: form.classId,
         instructions: form.instructions,
@@ -88,7 +94,7 @@ function TeacherHomeworkPage() {
         teacherId: currentUser.id,
       });
 
-      await loadPageData();
+      setHomeworkItems((current) => [createdHomework, ...current]);
       setForm({ ...initialForm, classId: classes[0]?.id || "" });
       setFile(null);
       setFileName("");

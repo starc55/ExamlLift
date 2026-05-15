@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import ErrorAlert from "../../components/feedback/ErrorAlert";
@@ -8,6 +8,7 @@ import { getContentList } from "../../services/content/contentService";
 import { getAllHomeworkSubmissions } from "../../services/homework/homeworkService";
 import { getAllResults } from "../../services/results/resultService";
 import { getTeacherTests } from "../../services/tests/testService";
+import { useSafeAsyncEffect } from "../../hooks/useSafeAsyncEffect";
 
 function TeacherDashboardPage() {
   const [classes, setClasses] = useState([]);
@@ -18,44 +19,40 @@ function TeacherDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadDashboard() {
+  useSafeAsyncEffect("teacher-dashboard", async ({ safeSet }) => {
+    safeSet(() => {
       setLoading(true);
       setError("");
+    });
 
-      try {
-        const [nextClasses, nextContent, nextTests, nextResults, nextAssignments] =
-          await Promise.all([
-            getTeacherClasses(),
-            getContentList(),
-            getTeacherTests(),
-            getAllResults(),
-            getAllHomeworkSubmissions(),
-          ]);
+    try {
+      const [nextClasses, nextContent, nextTests, nextAssignments] =
+        await Promise.all([
+          getTeacherClasses(),
+          getContentList(),
+          getTeacherTests(),
+          getAllHomeworkSubmissions(),
+        ]);
+      const nextResults = await getAllResults({
+        homeworkSubmissions: nextAssignments,
+      });
 
-        if (!isMounted) {
-          return;
-        }
-
+      safeSet(() => {
         setClasses(nextClasses);
         setContentCount(nextContent.length);
         setTests(nextTests);
         setResults(nextResults);
         setAssignments(nextAssignments);
-      } catch (requestError) {
+      });
+    } catch (requestError) {
+      safeSet(() => {
         setError(requestError.message);
-      } finally {
+      });
+    } finally {
+      safeSet(() => {
         setLoading(false);
-      }
+      });
     }
-
-    loadDashboard();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   const averagePercent = results.length

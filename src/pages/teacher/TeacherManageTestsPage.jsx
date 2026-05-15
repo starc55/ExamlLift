@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   FaChartSimple,
   FaClock,
@@ -18,6 +18,7 @@ import {
   getTeacherTests,
   updateTest,
 } from "../../services/tests/testService";
+import { useSafeAsyncEffect } from "../../hooks/useSafeAsyncEffect";
 
 const TEST_TYPES = ["vocabulary", "grammar", "reading", "listening", "writing", "speaking"];
 const TEST_SECTIONS = ["midterm", "final", "practice"];
@@ -95,42 +96,31 @@ function TeacherManageTestsPage() {
     });
   }, [sectionFilter, searchTerm, tests, typeFilter]);
 
-  const refreshTests = async () => {
-    const nextTests = await getTeacherTests();
-    setTests(nextTests);
-  };
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadPageData() {
+  useSafeAsyncEffect("teacher-manage-tests", async ({ safeSet }) => {
+    safeSet(() => {
       setLoading(true);
       setError("");
+    });
 
-      try {
-        const [nextClasses, nextTests] = await Promise.all([
-          getTeacherClasses(),
-          getTeacherTests(),
-        ]);
+    try {
+      const [nextClasses, nextTests] = await Promise.all([
+        getTeacherClasses(),
+        getTeacherTests(),
+      ]);
 
-        if (!isMounted) {
-          return;
-        }
-
+      safeSet(() => {
         setClasses(nextClasses);
         setTests(nextTests);
-      } catch (requestError) {
+      });
+    } catch (requestError) {
+      safeSet(() => {
         setError(requestError.message);
-      } finally {
+      });
+    } finally {
+      safeSet(() => {
         setLoading(false);
-      }
+      });
     }
-
-    loadPageData();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   const openCreateModal = () => {
@@ -203,13 +193,15 @@ function TeacherManageTestsPage() {
         throw new Error("Avval class tanlang.");
       }
 
-      if (form.id) {
-        await updateTest(form.id, payload);
-      } else {
-        await createTest(payload);
-      }
+      const savedTest = form.id
+        ? await updateTest(form.id, payload)
+        : await createTest(payload);
 
-      await refreshTests();
+      setTests((current) =>
+        form.id
+          ? current.map((item) => (item.id === savedTest.id ? savedTest : item))
+          : [savedTest, ...current]
+      );
       setIsModalOpen(false);
     } catch (requestError) {
       setError(requestError.message);
@@ -227,7 +219,7 @@ function TeacherManageTestsPage() {
 
     try {
       await deleteTest(testId);
-      await refreshTests();
+      setTests((current) => current.filter((item) => item.id !== testId));
     } catch (requestError) {
       setError(requestError.message);
     }

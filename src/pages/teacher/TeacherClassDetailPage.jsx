@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import ErrorAlert from "../../components/feedback/ErrorAlert";
@@ -8,6 +8,7 @@ import { getClassById } from "../../services/classes/classService";
 import { getContentList } from "../../services/content/contentService";
 import { getStudentTestsByClass } from "../../services/tests/testService";
 import { getTeacherClassResults } from "../../services/results/resultService";
+import { useSafeAsyncEffect } from "../../hooks/useSafeAsyncEffect";
 
 function TeacherClassDetailPage() {
   const { id } = useParams();
@@ -19,41 +20,35 @@ function TeacherClassDetailPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadClassData() {
+  useSafeAsyncEffect("teacher-class-detail", async ({ safeSet }) => {
+    safeSet(() => {
       setLoading(true);
       setError("");
+    });
 
-      try {
-        const [nextClass, nextContents, nextTests, nextResults] = await Promise.all([
-          getClassById(id),
-          getContentList({ classId: id }),
-          getStudentTestsByClass(id),
-          getTeacherClassResults({ classId: id }),
-        ]);
+    try {
+      const [nextClass, nextContents, nextTests, nextResults] = await Promise.all([
+        getClassById(id),
+        getContentList({ classId: id }),
+        getStudentTestsByClass(id),
+        getTeacherClassResults({ classId: id }),
+      ]);
 
-        if (!isMounted) {
-          return;
-        }
-
+      safeSet(() => {
         setClassItem(nextClass);
         setContents(nextContents);
         setTests(nextTests);
         setResults(nextResults);
-      } catch (requestError) {
+      });
+    } catch (requestError) {
+      safeSet(() => {
         setError(requestError.message);
-      } finally {
+      });
+    } finally {
+      safeSet(() => {
         setLoading(false);
-      }
+      });
     }
-
-    loadClassData();
-
-    return () => {
-      isMounted = false;
-    };
   }, [id]);
 
   const handleCopy = async () => {

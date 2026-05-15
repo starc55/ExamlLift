@@ -1,7 +1,6 @@
 import {
   memo,
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -34,6 +33,7 @@ import {
   uploadContentFiles,
   validateContentFile,
 } from "../../services/content/contentService";
+import { useSafeAsyncEffect } from "../../hooks/useSafeAsyncEffect";
 
 const initialForm = {
   title: "",
@@ -185,41 +185,38 @@ function TeacherUploadContentPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const refreshHomeworkSubmissions = useCallback(async () => {
-    try {
-      const nextSubmissions = await getAllHomeworkSubmissions();
-      setSubmissions(nextSubmissions);
-    } catch (requestError) {
-      console.error("Homework submissions refresh failed:", requestError);
-    }
-  }, []);
-
-  const loadPageData = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  useSafeAsyncEffect("teacher-upload-content", async ({ safeSet }) => {
+    safeSet(() => {
+      setLoading(true);
+      setError("");
+    });
 
     try {
-      const [nextClasses, nextContent] = await Promise.all([
+      const [nextClasses, nextContent, nextSubmissions] = await Promise.all([
         getTeacherClasses(),
         getContentList(),
+        getAllHomeworkSubmissions(),
       ]);
-      setClasses(nextClasses);
-      setContentItems(nextContent.slice(0, 6));
-      setForm((current) => ({
-        ...current,
-        classId: current.classId || nextClasses[0]?.id || "",
-      }));
+
+      safeSet(() => {
+        setClasses(nextClasses);
+        setContentItems(nextContent.slice(0, 6));
+        setSubmissions(nextSubmissions);
+        setForm((current) => ({
+          ...current,
+          classId: current.classId || nextClasses[0]?.id || "",
+        }));
+      });
     } catch (requestError) {
-      setError(requestError.message);
+      safeSet(() => {
+        setError(requestError.message);
+      });
     } finally {
-      setLoading(false);
+      safeSet(() => {
+        setLoading(false);
+      });
     }
   }, []);
-
-  useEffect(() => {
-    void loadPageData();
-    void refreshHomeworkSubmissions();
-  }, [loadPageData, refreshHomeworkSubmissions]);
 
   const handleSubmit = useCallback(async (event) => {
     event.preventDefault();

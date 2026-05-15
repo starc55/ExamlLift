@@ -253,7 +253,7 @@ function homeworkSubmissionToResult(submission) {
   });
 }
 
-export async function getAllResults() {
+export async function getAllResults(options = {}) {
   assertSupabaseConfig();
 
   const { data, error } = await supabase
@@ -266,9 +266,11 @@ export async function getAllResults() {
   }
 
   const examResults = (data || []).map(mapDbResult);
-  const homeworkResults = (await getAllHomeworkSubmissions()).map(
-    homeworkSubmissionToResult
-  );
+  const homeworkSubmissions =
+    options.homeworkSubmissions || (await getAllHomeworkSubmissions());
+  const homeworkResults = options.includeHomework === false
+    ? []
+    : homeworkSubmissions.map(homeworkSubmissionToResult);
 
   return [...examResults, ...homeworkResults].sort(
     (left, right) => new Date(right.submittedAt) - new Date(left.submittedAt)

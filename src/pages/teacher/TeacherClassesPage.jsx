@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import ErrorAlert from "../../components/feedback/ErrorAlert";
@@ -9,6 +9,7 @@ import {
   deleteClass,
   getTeacherClasses,
 } from "../../services/classes/classService";
+import { useSafeAsyncEffect } from "../../hooks/useSafeAsyncEffect";
 
 const initialForm = {
   title: "",
@@ -24,21 +25,26 @@ function TeacherClassesPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  const loadClasses = async () => {
-    setLoading(true);
-    setError("");
+  useSafeAsyncEffect("teacher-classes", async ({ safeSet }) => {
+    safeSet(() => {
+      setLoading(true);
+      setError("");
+    });
 
     try {
-      setClasses(await getTeacherClasses());
+      const nextClasses = await getTeacherClasses();
+      safeSet(() => {
+        setClasses(nextClasses);
+      });
     } catch (requestError) {
-      setError(requestError.message);
+      safeSet(() => {
+        setError(requestError.message);
+      });
     } finally {
-      setLoading(false);
+      safeSet(() => {
+        setLoading(false);
+      });
     }
-  };
-
-  useEffect(() => {
-    loadClasses();
   }, []);
 
   const handleSubmit = async (event) => {

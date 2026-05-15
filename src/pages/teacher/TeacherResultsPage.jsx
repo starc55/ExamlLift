@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import ResultTable from "../../components/dashboard/ResultTable";
 import ErrorAlert from "../../components/feedback/ErrorAlert";
 import Modal from "../../components/layout/Modal";
 import ResultDetails from "../../components/results/ResultDetails";
 import { getAllResults } from "../../services/results/resultService";
+import { useSafeAsyncEffect } from "../../hooks/useSafeAsyncEffect";
 
 function TeacherResultsPage() {
   const [sectionFilter, setSectionFilter] = useState("all");
@@ -16,31 +17,26 @@ function TeacherResultsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadResults() {
+  useSafeAsyncEffect("teacher-results", async ({ safeSet }) => {
+    safeSet(() => {
       setLoading(true);
       setError("");
+    });
 
-      try {
-        const data = await getAllResults();
-
-        if (isMounted) {
-          setResults(data);
-        }
-      } catch (requestError) {
+    try {
+      const data = await getAllResults();
+      safeSet(() => {
+        setResults(data);
+      });
+    } catch (requestError) {
+      safeSet(() => {
         setError(requestError.message);
-      } finally {
+      });
+    } finally {
+      safeSet(() => {
         setLoading(false);
-      }
+      });
     }
-
-    loadResults();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
   const studentOptions = [...new Set(results.map((result) => result.studentName).filter(Boolean))];
 

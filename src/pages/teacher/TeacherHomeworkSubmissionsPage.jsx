@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import CriteriaBreakdown from "../../components/feedback/CriteriaBreakdown";
 import ErrorAlert from "../../components/feedback/ErrorAlert";
 import FeedbackCard from "../../components/feedback/FeedbackCard";
@@ -6,6 +6,7 @@ import ScoreSummary from "../../components/feedback/ScoreSummary";
 import WrongAnswersList from "../../components/feedback/WrongAnswersList";
 import Modal from "../../components/layout/Modal";
 import { getAllHomeworkSubmissions } from "../../services/homework/homeworkService";
+import { useSafeAsyncEffect } from "../../hooks/useSafeAsyncEffect";
 
 function TeacherHomeworkSubmissionsPage() {
   const [typeFilter, setTypeFilter] = useState("all");
@@ -15,31 +16,26 @@ function TeacherHomeworkSubmissionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadSubmissions() {
+  useSafeAsyncEffect("teacher-homework-submissions", async ({ safeSet }) => {
+    safeSet(() => {
       setLoading(true);
       setError("");
+    });
 
-      try {
-        const data = await getAllHomeworkSubmissions();
-
-        if (isMounted) {
-          setSubmissions(data);
-        }
-      } catch (requestError) {
+    try {
+      const data = await getAllHomeworkSubmissions();
+      safeSet(() => {
+        setSubmissions(data);
+      });
+    } catch (requestError) {
+      safeSet(() => {
         setError(requestError.message);
-      } finally {
+      });
+    } finally {
+      safeSet(() => {
         setLoading(false);
-      }
+      });
     }
-
-    loadSubmissions();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   const studentOptions = [...new Set(submissions.map((item) => item.studentName))];

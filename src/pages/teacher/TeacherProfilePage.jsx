@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import ErrorAlert from "../../components/feedback/ErrorAlert";
 import { useAuth } from "../../context/AuthContext";
 import { getContentList } from "../../services/content/contentService";
 import { getAllHomeworkSubmissions } from "../../services/homework/homeworkService";
 import { getTeacherTests } from "../../services/tests/testService";
+import { useSafeAsyncEffect } from "../../hooks/useSafeAsyncEffect";
 
 function TeacherProfilePage() {
   const { currentUser } = useAuth();
@@ -14,39 +15,33 @@ function TeacherProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadProfileStats() {
+  useSafeAsyncEffect("teacher-profile", async ({ safeSet }) => {
+    safeSet(() => {
       setLoading(true);
       setError("");
+    });
 
-      try {
-        const [content, tests, submissions] = await Promise.all([
-          getContentList(),
-          getTeacherTests(),
-          getAllHomeworkSubmissions(),
-        ]);
+    try {
+      const [content, tests, submissions] = await Promise.all([
+        getContentList(),
+        getTeacherTests(),
+        getAllHomeworkSubmissions(),
+      ]);
 
-        if (!isMounted) {
-          return;
-        }
-
+      safeSet(() => {
         setContentCount(content.filter((item) => item.createdBy === currentUser.id).length);
         setTestsCount(tests.length);
         setAssignments(submissions);
-      } catch (requestError) {
+      });
+    } catch (requestError) {
+      safeSet(() => {
         setError(requestError.message);
-      } finally {
+      });
+    } finally {
+      safeSet(() => {
         setLoading(false);
-      }
+      });
     }
-
-    loadProfileStats();
-
-    return () => {
-      isMounted = false;
-    };
   }, [currentUser.id]);
 
   const pendingAssignments = assignments.filter(

@@ -1,39 +1,35 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import DashboardCard from "../../components/dashboard/DashboardCard";
 import ErrorAlert from "../../components/feedback/ErrorAlert";
 import ProgressBar from "../../components/ProgressBar";
 import { getAllResults } from "../../services/results/resultService";
+import { useSafeAsyncEffect } from "../../hooks/useSafeAsyncEffect";
 
 function TeacherAnalyticsPage() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadResults() {
+  useSafeAsyncEffect("teacher-analytics", async ({ safeSet }) => {
+    safeSet(() => {
       setLoading(true);
       setError("");
+    });
 
-      try {
-        const data = await getAllResults();
-
-        if (isMounted) {
-          setResults(data);
-        }
-      } catch (requestError) {
+    try {
+      const data = await getAllResults();
+      safeSet(() => {
+        setResults(data);
+      });
+    } catch (requestError) {
+      safeSet(() => {
         setError(requestError.message);
-      } finally {
+      });
+    } finally {
+      safeSet(() => {
         setLoading(false);
-      }
+      });
     }
-
-    loadResults();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   const sectionAverage = (section) => {

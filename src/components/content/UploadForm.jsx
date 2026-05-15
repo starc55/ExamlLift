@@ -1,32 +1,38 @@
+import { memo } from "react";
+
 const DESCRIPTION_MAX_CHARS = 1000;
-const LESSON_NOTES_MAX_CHARS = 10000;
+const LESSON_NOTES_MAX_CHARS = 12000;
 const ASSIGNMENT_TITLE_MAX_CHARS = 200;
 const ASSIGNMENT_BRIEF_MAX_CHARS = 2000;
+const LESSON_NOTES_WARNING_CHARS = 10000;
+
+const fileFields = [
+  {
+    key: "image",
+    inputId: "upload-image-file",
+    label: "Image upload",
+    accept: "image/jpeg,image/png,image/webp",
+    helper: "JPG, PNG, WebP. Large images are resized; max 2MB after optimization.",
+  },
+  {
+    key: "audio",
+    inputId: "upload-audio-file",
+    label: "Audio upload",
+    accept: "audio/*",
+    helper: "MP3, WAV, WebM, or OGG. Max 20MB.",
+  },
+  {
+    key: "pdf",
+    inputId: "upload-pdf-file",
+    label: "PDF upload",
+    accept: "application/pdf",
+    helper: "Worksheet, guide or homework sheet. Max 10MB.",
+  },
+];
 
 function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
-  const fileFields = [
-    {
-      key: "image",
-      inputId: "upload-image-file",
-      label: "Image upload",
-      accept: "image/jpeg,image/png,image/webp",
-      helper: "JPG, PNG, WebP. Large images are resized; max 2MB after optimization.",
-    },
-    {
-      key: "audio",
-      inputId: "upload-audio-file",
-      label: "Audio upload",
-      accept: "audio/*",
-      helper: "MP3, WAV, WebM, or OGG. Max 20MB.",
-    },
-    {
-      key: "pdf",
-      inputId: "upload-pdf-file",
-      label: "PDF upload",
-      accept: "application/pdf",
-      helper: "Worksheet, guide or homework sheet. Max 10MB.",
-    },
-  ];
+  const lessonNotesLength = form.lessonNotes?.length || 0;
+  const lessonNotesIsLarge = lessonNotesLength >= LESSON_NOTES_WARNING_CHARS;
 
   return (
     <form className="upload-form card" onSubmit={onSubmit}>
@@ -95,7 +101,18 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
         />
       </label>
       <label>
-        Lesson notes
+        <span className="field-label-row">
+          <span>Lesson notes</span>
+          <span
+            className={
+              lessonNotesIsLarge
+                ? "field-counter field-counter--warning"
+                : "field-counter"
+            }
+          >
+            {lessonNotesLength}/{LESSON_NOTES_MAX_CHARS}
+          </span>
+        </span>
         <textarea
           value={form.lessonNotes}
           onChange={(event) => onChange("lessonNotes", event.target.value)}
@@ -104,6 +121,11 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
           placeholder="Write short notes. Each paragraph becomes one lesson block."
           disabled={isSubmitting}
         />
+        {lessonNotesIsLarge ? (
+          <span className="field-warning">
+            Large lesson text will be compacted before saving.
+          </span>
+        ) : null}
       </label>
       <div className="form-grid">
         <label>
@@ -163,4 +185,4 @@ function UploadForm({ form, onChange, onFileChange, onSubmit, isSubmitting }) {
   );
 }
 
-export default UploadForm;
+export default memo(UploadForm);

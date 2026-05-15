@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   FaChalkboardUser,
   FaChevronDown,
@@ -21,6 +28,7 @@ import {
   createContent,
   deleteContent,
   getAllContent,
+  removeEmptyFields,
   updateContent,
   uploadContentFiles,
   validateContentFile,
@@ -44,12 +52,96 @@ const initialForm = {
 };
 
 const DESCRIPTION_MAX_CHARS = 1000;
-const LESSON_NOTES_MAX_CHARS = 10000;
+const LESSON_NOTES_MAX_CHARS = 12000;
 const ASSIGNMENT_TITLE_MAX_CHARS = 200;
 const ASSIGNMENT_BRIEF_MAX_CHARS = 2000;
+const PREVIEW_MAX_SECTIONS = 5;
+const PREVIEW_SECTION_MAX_CHARS = 1200;
+
+const contentToForm = (item) => ({
+  title: item.title || "",
+  classId: item.classId || "",
+  category: item.category || "General English",
+  level: item.level || "Intermediate",
+  duration: item.duration || "15 min",
+  description: item.description || "",
+  lessonNotes: (item.sections || []).map((section) => section.body).join("\n"),
+  assignmentTitle: item.assignmentTitle || "",
+  assignmentInstructions: item.assignmentInstructions || "",
+  imageUrl: item.imageUrl || "",
+  audioUrl: item.audioUrl || "",
+  pdfUrl: item.pdfUrl || "",
+  fileUrl: item.fileUrl || "",
+  fileNames: {
+    image: item.imageUrl ? "Existing image" : "",
+    audio: item.audioUrl ? "Existing audio" : "",
+    pdf: item.pdfUrl ? "Existing PDF" : "",
+  },
+});
+
+function getPayloadSize(payload) {
+  try {
+    return JSON.stringify(payload).length;
+  } catch {
+    return 0;
+  }
+}
+
+function getPreviewBody(body) {
+  const value = String(body || "");
+
+  if (value.length <= PREVIEW_SECTION_MAX_CHARS) {
+    return value;
+  }
+
+  return `${value.slice(0, PREVIEW_SECTION_MAX_CHARS).trim()}...`;
+}
+
+const ContentPreviewBody = memo(function ContentPreviewBody({ content }) {
+  const allSections = content.sections || [];
+  const previewSections = allSections.slice(0, PREVIEW_MAX_SECTIONS);
+  const hiddenSectionCount = Math.max(0, allSections.length - previewSections.length);
+
+  return (
+    <div className="modal-card__content">
+      <p>{content.description}</p>
+      <div className="content-action-preview__meta">
+        <span>{content.category}</span>
+        <span>{content.level}</span>
+        <span>{content.duration}</span>
+      </div>
+      <div className="content-preview__notes">
+        {previewSections.map((section) => (
+          <div key={section.heading} className="prose-block">
+            <h4>{section.heading}</h4>
+            <p>{getPreviewBody(section.body)}</p>
+          </div>
+        ))}
+        {hiddenSectionCount ? (
+          <p className="content-preview__more">
+            +{hiddenSectionCount} more lesson blocks
+          </p>
+        ) : null}
+      </div>
+      <div className="card-actions">
+        {content.pdfUrl ? (
+          <a className="secondary-button" href={content.pdfUrl} target="_blank" rel="noreferrer">
+            Open PDF
+          </a>
+        ) : null}
+        {content.audioUrl ? (
+          <a className="secondary-button" href={content.audioUrl} target="_blank" rel="noreferrer">
+            Open audio
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+});
 
 function TeacherUploadContentPage() {
   const { currentUser } = useAuth();
+  const currentUserId = currentUser?.id;
   const submitLockRef = useRef(false);
   const [form, setForm] = useState(initialForm);
   const [uploadFormKey, setUploadFormKey] = useState(0);
@@ -73,25 +165,25 @@ function TeacherUploadContentPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const refreshContentList = async () => {
+  const refreshContentList = useCallback(async () => {
     try {
       const nextContent = await getAllContent();
       setContentItems(nextContent.slice(0, 6));
     } catch (requestError) {
       console.error("Content list refresh failed:", requestError);
     }
-  };
+  }, []);
 
-  const refreshHomeworkSubmissions = async () => {
+  const refreshHomeworkSubmissions = useCallback(async () => {
     try {
       const nextSubmissions = await getAllHomeworkSubmissions();
       setSubmissions(nextSubmissions);
     } catch (requestError) {
       console.error("Homework submissions refresh failed:", requestError);
     }
-  };
+  }, []);
 
-  const loadPageData = async () => {
+  const loadPageData = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -111,19 +203,20 @@ function TeacherUploadContentPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadPageData();
-    void refreshHomeworkSubmissions();
   }, []);
 
-  const handleSubmit = async (event) => {
+  useEffect(() => {
+    void loadPageData();
+    void refreshHomeworkSubmissions();
+  }, [loadPageData, refreshHomeworkSubmissions]);
+
+  const handleSubmit = useCallback(async (event) => {
     event.preventDefault();
     if (submitLockRef.current) {
       return;
     }
 
+    console.time("saveContent");
     submitLockRef.current = true;
     setStatusMessage("");
     setStatusTone("success");
@@ -131,6 +224,7 @@ function TeacherUploadContentPage() {
     setUploadProgress({ percent: 0, message: "" });
     setIsSubmitting(true);
     let savingCleared = false;
+    let saveTimerEnded = false;
     const clearSavingState = () => {
       if (savingCleared) {
         return;
@@ -141,14 +235,25 @@ function TeacherUploadContentPage() {
       setIsSubmitting(false);
       console.log("saving false");
     };
+    const finishSaveTiming = () => {
+      if (saveTimerEnded) {
+        return;
+      }
+
+      saveTimerEnded = true;
+      console.timeEnd("saveContent");
+    };
 
     try {
       if (!form.classId) {
         throw new Error("Avval class yarating yoki class tanlang.");
       }
+      if (!currentUserId) {
+        throw new Error("Teacher account not found. Please log in again.");
+      }
 
       const { imageUrl, audioUrl, pdfUrl } = await uploadContentFiles(files, {
-        userId: currentUser.id,
+        userId: currentUserId,
         onProgress: (progress) => {
           setUploadProgress(progress);
           setStatusMessage(progress.message);
@@ -156,32 +261,35 @@ function TeacherUploadContentPage() {
       });
       console.log("content upload done");
 
-      const sections = form.lessonNotes
-        .split("\n")
-        .map((item) => item.trim())
-        .filter(Boolean)
-        .map((body, index) => ({
-          heading: `Lesson block ${index + 1}`,
-          body,
-        }));
-
       setStatusMessage("Content metadata databasega saqlanmoqda...");
       setUploadProgress({
         percent: 88,
         message: "Content metadata databasega saqlanmoqda...",
       });
-      const savedContent = await createContent({
-        ...form,
+      const cleanedPayload = removeEmptyFields({
+        title: form.title,
         classId: form.classId,
+        category: form.category,
+        level: form.level,
+        duration: form.duration,
+        description: form.description,
+        lessonNotes: form.lessonNotes,
+        assignmentTitle: form.assignmentTitle,
+        assignmentInstructions: form.assignmentInstructions,
         imageUrl,
         audioUrl,
         pdfUrl,
-        sections,
-        teacherId: currentUser.id,
+        teacherId: currentUserId,
       });
+      console.log("content save cleaned payload", {
+        payloadSize: getPayloadSize(cleanedPayload),
+        lessonNotesLength: cleanedPayload.lessonNotes?.length || 0,
+      });
+      const savedContent = await createContent(cleanedPayload);
       console.log("content insert done");
 
       clearSavingState();
+      finishSaveTiming();
       setStatusTone("success");
       setStatusMessage("Content saved successfully");
       setForm({ ...initialForm, classId: form.classId || classes[0]?.id || "" });
@@ -205,10 +313,11 @@ function TeacherUploadContentPage() {
       });
     } finally {
       clearSavingState();
+      finishSaveTiming();
     }
-  };
+  }, [classes, currentUserId, files, form, refreshContentList]);
 
-  const handleFileChange = (field, file) => {
+  const handleFileChange = useCallback((field, file) => {
     setStatusMessage("");
     setError("");
 
@@ -233,35 +342,28 @@ function TeacherUploadContentPage() {
       }));
       setError(validationError.message);
     }
-  };
+  }, []);
 
-  const selectedClass = classes.find((item) => item.id === form.classId) || null;
+  const selectedClass = useMemo(
+    () => classes.find((item) => item.id === form.classId) || null,
+    [classes, form.classId]
+  );
 
-  const contentToForm = (item) => ({
-    title: item.title || "",
-    classId: item.classId || "",
-    category: item.category || "General English",
-    level: item.level || "Intermediate",
-    duration: item.duration || "15 min",
-    description: item.description || "",
-    lessonNotes: (item.sections || []).map((section) => section.body).join("\n"),
-    assignmentTitle: item.assignmentTitle || "",
-    assignmentInstructions: item.assignmentInstructions || "",
-    imageUrl: item.imageUrl || "",
-    audioUrl: item.audioUrl || "",
-    pdfUrl: item.pdfUrl || "",
-    fileUrl: item.fileUrl || "",
-    fileNames: {
-      image: item.imageUrl ? "Existing image" : "",
-      audio: item.audioUrl ? "Existing audio" : "",
-      pdf: item.pdfUrl ? "Existing PDF" : "",
-    },
-  });
+  const handleFormChange = useCallback((field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  }, []);
 
-  const openEditContent = (item) => {
+  const handleClassChange = useCallback((event) => {
+    setForm((current) => ({
+      ...current,
+      classId: event.target.value,
+    }));
+  }, []);
+
+  const openEditContent = useCallback((item) => {
     setEditingContent(item);
     setEditForm(contentToForm(item));
-  };
+  }, []);
 
   const handleEditSubmit = async (event) => {
     event.preventDefault();
@@ -270,18 +372,22 @@ function TeacherUploadContentPage() {
     setStatusMessage("");
 
     try {
-      const sections = editForm.lessonNotes
-        .split("\n")
-        .map((item) => item.trim())
-        .filter(Boolean)
-        .map((body, index) => ({
-          heading: `Lesson block ${index + 1}`,
-          body,
-        }));
-      const updated = await updateContent(editingContent.id, {
-        ...editForm,
-        sections,
+      const cleanedPayload = removeEmptyFields({
+        title: editForm.title,
+        classId: editForm.classId,
+        category: editForm.category,
+        level: editForm.level,
+        duration: editForm.duration,
+        description: editForm.description,
+        lessonNotes: editForm.lessonNotes,
+        assignmentTitle: editForm.assignmentTitle,
+        assignmentInstructions: editForm.assignmentInstructions,
+        imageUrl: editForm.imageUrl,
+        audioUrl: editForm.audioUrl,
+        pdfUrl: editForm.pdfUrl,
+        fileUrl: editForm.fileUrl,
       });
+      const updated = await updateContent(editingContent.id, cleanedPayload);
 
       setContentItems((current) =>
         current.map((item) => (item.id === updated.id ? updated : item))
@@ -316,6 +422,47 @@ function TeacherUploadContentPage() {
     }
   };
 
+  const recentContentCards = useMemo(
+    () =>
+      contentItems.map((item) => (
+        <article key={item.id} className="teacher-content-item">
+          <ContentCard
+            item={item}
+            isActive={false}
+            onOpen={() => {}}
+            showAction={false}
+          />
+          <div className="teacher-content-item__footer">
+            <div>
+              <span className="pill pill--soft">{item.level}</span>
+              <span className="pill pill--soft">{item.category}</span>
+            </div>
+            <details className="action-menu">
+              <summary aria-label={`${item.title} actions`}>
+                <FaEllipsisVertical />
+                <span>Actions</span>
+              </summary>
+              <div className="action-menu__list">
+                <button type="button" onClick={() => setSelectedContent(item)}>
+                  <FaEye />
+                  <span>View</span>
+                </button>
+                <button type="button" onClick={() => openEditContent(item)}>
+                  <FaPenToSquare />
+                  <span>Edit</span>
+                </button>
+                <button type="button" onClick={() => setDeletingContent(item)}>
+                  <FaTrashCan />
+                  <span>Delete</span>
+                </button>
+              </div>
+            </details>
+          </div>
+        </article>
+      )),
+    [contentItems, openEditContent]
+  );
+
   return (
     <div className="page-stack">
       <section className="class-publish-panel">
@@ -340,12 +487,7 @@ function TeacherUploadContentPage() {
             <select
               id="content-class-select"
               value={form.classId}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  classId: event.target.value,
-                }))
-              }
+              onChange={handleClassChange}
             >
               <option value="">Select class</option>
               {classes.map((item) => (
@@ -376,7 +518,7 @@ function TeacherUploadContentPage() {
       <UploadForm
         key={uploadFormKey}
         form={form}
-        onChange={(field, value) => setForm((current) => ({ ...current, [field]: value }))}
+        onChange={handleFormChange}
         onFileChange={handleFileChange}
         onSubmit={handleSubmit}
         isSubmitting={isSubmitting}
@@ -416,42 +558,7 @@ function TeacherUploadContentPage() {
             <p>Uploaded lessons will appear here.</p>
           </section>
         ) : null}
-        {contentItems.map((item) => (
-          <article key={item.id} className="teacher-content-item">
-            <ContentCard
-              item={item}
-              isActive={false}
-              onOpen={() => {}}
-              showAction={false}
-            />
-            <div className="teacher-content-item__footer">
-              <div>
-                <span className="pill pill--soft">{item.level}</span>
-                <span className="pill pill--soft">{item.category}</span>
-              </div>
-              <details className="action-menu">
-                <summary aria-label={`${item.title} actions`}>
-                  <FaEllipsisVertical />
-                  <span>Actions</span>
-                </summary>
-                <div className="action-menu__list">
-                  <button type="button" onClick={() => setSelectedContent(item)}>
-                    <FaEye />
-                    <span>View</span>
-                  </button>
-                  <button type="button" onClick={() => openEditContent(item)}>
-                    <FaPenToSquare />
-                    <span>Edit</span>
-                  </button>
-                  <button type="button" onClick={() => setDeletingContent(item)}>
-                    <FaTrashCan />
-                    <span>Delete</span>
-                  </button>
-                </div>
-              </details>
-            </div>
-          </article>
-        ))}
+        {recentContentCards}
       </section>
 
       <section className="card assignment-review">
@@ -481,36 +588,7 @@ function TeacherUploadContentPage() {
         onClose={() => setSelectedContent(null)}
         className="modal-card--wide"
       >
-        {selectedContent ? (
-          <div className="modal-card__content">
-            <p>{selectedContent.description}</p>
-            <div className="content-action-preview__meta">
-              <span>{selectedContent.category}</span>
-              <span>{selectedContent.level}</span>
-              <span>{selectedContent.duration}</span>
-            </div>
-            <div className="content-preview__notes">
-              {selectedContent.sections.map((section) => (
-                <div key={section.heading} className="prose-block">
-                  <h4>{section.heading}</h4>
-                  <p>{section.body}</p>
-                </div>
-              ))}
-            </div>
-            <div className="card-actions">
-              {selectedContent.pdfUrl ? (
-                <a className="secondary-button" href={selectedContent.pdfUrl} target="_blank" rel="noreferrer">
-                  Open PDF
-                </a>
-              ) : null}
-              {selectedContent.audioUrl ? (
-                <a className="secondary-button" href={selectedContent.audioUrl} target="_blank" rel="noreferrer">
-                  Open audio
-                </a>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
+        {selectedContent ? <ContentPreviewBody content={selectedContent} /> : null}
       </Modal>
 
       <Modal

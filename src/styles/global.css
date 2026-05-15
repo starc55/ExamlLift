@@ -1699,6 +1699,36 @@ pre {
   color: var(--muted);
 }
 
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.field-counter {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.field-counter--warning,
+.field-warning {
+  color: var(--danger);
+}
+
+.field-warning {
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.content-preview__more {
+  padding-top: 4px;
+  color: var(--primary-dark);
+  font-weight: 700;
+}
+
 .file-field__row {
   display: flex;
   align-items: center;

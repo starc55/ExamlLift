@@ -7,8 +7,9 @@ const AUDIO_MAX_BYTES = 20 * 1024 * 1024;
 const IMAGE_MAX_DIMENSION = 1600;
 const IMAGE_QUALITY = 0.82;
 const DESCRIPTION_MAX_CHARS = 1000;
-const TEXT_CONTENT_MAX_CHARS = 10000;
-const SECTION_BODY_MAX_CHARS = 1800;
+const TEXT_CONTENT_MAX_CHARS = 15000;
+const LESSON_NOTES_MAX_CHARS = 12000;
+const SECTION_BODY_MAX_CHARS = 2400;
 const MAX_METADATA_SECTIONS = 5;
 const ASSIGNMENT_TITLE_MAX_CHARS = 200;
 const ASSIGNMENT_INSTRUCTIONS_MAX_CHARS = 2000;
@@ -38,6 +39,54 @@ function parseContentMetadata(textContent) {
   }
 }
 
+function isFileLike(value) {
+  return (
+    (typeof File !== "undefined" && value instanceof File) ||
+    (typeof Blob !== "undefined" && value instanceof Blob)
+  );
+}
+
+function isPlainObject(value) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isEmptyFieldValue(value) {
+  return (
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    (Array.isArray(value) && value.length === 0) ||
+    (isPlainObject(value) && Object.keys(value).length === 0)
+  );
+}
+
+export function removeEmptyFields(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => removeEmptyFields(item))
+      .filter((item) => !isEmptyFieldValue(item));
+  }
+
+  if (isFileLike(value) || value instanceof Date || !isPlainObject(value)) {
+    return typeof value === "string" ? value.trim() : value;
+  }
+
+  return Object.entries(value).reduce((cleaned, [key, item]) => {
+    const nextValue = removeEmptyFields(item);
+
+    if (!isEmptyFieldValue(nextValue)) {
+      cleaned[key] = nextValue;
+    }
+
+    return cleaned;
+  }, {});
+}
+
 function inferContentType(payload) {
   if (payload.contentType) {
     return normalizeContentType(payload.contentType);
@@ -47,9 +96,10 @@ function inferContentType(payload) {
     return normalizeContentType(payload.content_type);
   }
 
-  if (payload.pdfUrl) return "pdf";
-  if (payload.audioUrl) return "audio";
-  if (payload.imageUrl) return "image";
+  if (payload.pdfUrl || payload.pdf_url) return "pdf";
+  if (payload.audioUrl || payload.audio_url) return "audio";
+  if (payload.imageUrl || payload.image_url) return "image";
+  if (payload.videoUrl || payload.video_url) return "video";
   return "text";
 }
 
@@ -69,89 +119,219 @@ function trimToLimit(value, maxChars) {
   return String(value || "").trim().slice(0, maxChars);
 }
 
-function normalizeMetadataSections(payload, hasPdf) {
-  const sourceSections = Array.isArray(payload.sections) ? payload.sections : [];
-  const fallbackText = trimToLimit(
-    payload.lessonNotes || (!hasPdf ? payload.description : ""),
-    SECTION_BODY_MAX_CHARS
-  );
-  const sections = sourceSections.length
-    ? sourceSections
-    : fallbackText
-      ? [{ heading: "Lesson overview", body: fallbackText }]
-      : [];
+function chunkText(text, maxChars) {
+  const chunks = [];
+  let cursor = 0;
 
-  return sections
-    .slice(0, MAX_METADATA_SECTIONS)
-    .map((section, index) => ({
-      heading: trimToLimit(
-        section.heading || `Lesson block ${index + 1}`,
-        120
-      ),
-      body: trimToLimit(section.body || "", SECTION_BODY_MAX_CHARS),
-    }))
-    .filter((section) => section.heading || section.body);
+  while (cursor < text.length && chunks.length < MAX_METADATA_SECTIONS) {
+    const nextChunk = text.slice(cursor, cursor + maxChars).trim();
+
+    if (nextChunk) {
+      chunks.push(nextChunk);
+    }
+
+    cursor += maxChars;
+  }
+
+  return chunks;
+}
+
+function normalizeMetadataSections(payload) {
+  const sourceSections = Array.isArray(payload.sections) ? payload.sections : [];
+
+  if (sourceSections.length) {
+    return sourceSections
+      .flatMap((section) =>
+        chunkText(
+          String(section?.body || section || "").trim(),
+          SECTION_BODY_MAX_CHARS
+        )
+      )
+      .slice(0, MAX_METADATA_SECTIONS);
+  }
+
+  const sourceText = trimToLimit(
+    payload.lessonNotes || payload.lesson_notes || payload.description || "",
+    LESSON_NOTES_MAX_CHARS
+  );
+
+  if (!sourceText) {
+    return [];
+  }
+
+  const sections = [];
+  const blocks = sourceText
+    .split(/\n{2,}/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  for (const block of blocks) {
+    if (sections.length >= MAX_METADATA_SECTIONS) {
+      break;
+    }
+
+    sections.push(...chunkText(block, SECTION_BODY_MAX_CHARS));
+  }
+
+  return sections.slice(0, MAX_METADATA_SECTIONS);
 }
 
 function serializeContentMetadata(metadata) {
-  const serialized = JSON.stringify(metadata);
+  const cleanedMetadata = removeEmptyFields(metadata);
+  const serialized = JSON.stringify(cleanedMetadata);
 
   if (serialized.length <= TEXT_CONTENT_MAX_CHARS) {
     return serialized;
   }
 
   const compactMetadata = {
-    ...metadata,
-    sections: (metadata.sections || []).map((section) => ({
-      heading: trimToLimit(section.heading, 120),
-      body: trimToLimit(section.body, 700),
-    })),
-    assignmentInstructions: trimToLimit(metadata.assignmentInstructions, 1000),
+    ...cleanedMetadata,
+    s: (cleanedMetadata.s || []).map((section) =>
+      trimToLimit(section, 1800)
+    ),
+    ai: trimToLimit(cleanedMetadata.ai, 1200),
   };
-  const compactSerialized = JSON.stringify(compactMetadata);
+  const compactSerialized = JSON.stringify(removeEmptyFields(compactMetadata));
 
   if (compactSerialized.length <= TEXT_CONTENT_MAX_CHARS) {
     return compactSerialized;
   }
 
-  return JSON.stringify({
-    category: compactMetadata.category,
-    level: compactMetadata.level,
-    duration: compactMetadata.duration,
-    imageUrl: compactMetadata.imageUrl,
-    audioUrl: compactMetadata.audioUrl,
-    pdfUrl: compactMetadata.pdfUrl,
-    videoUrl: compactMetadata.videoUrl,
-    sections: [],
-    assignmentTitle: trimToLimit(compactMetadata.assignmentTitle, 160),
-    assignmentInstructions: trimToLimit(
-      compactMetadata.assignmentInstructions,
-      500
-    ),
-  });
+  return JSON.stringify(
+    removeEmptyFields({
+      v: 2,
+      c: compactMetadata.c,
+      l: compactMetadata.l,
+      d: compactMetadata.d,
+      a: compactMetadata.a,
+      s: (compactMetadata.s || []).map((section) =>
+        trimToLimit(section, 1400)
+      ),
+      at: trimToLimit(compactMetadata.at, 160),
+      ai: trimToLimit(compactMetadata.ai, 700),
+    })
+  );
 }
 
-function buildContentMetadata(payload) {
-  const hasPdf = Boolean(payload.pdfUrl || inferContentType(payload) === "pdf");
+function buildAssetMetadata(payload, primaryFileUrl) {
+  const assets = {
+    i: payload.imageUrl || payload.image_url || "",
+    au: payload.audioUrl || payload.audio_url || "",
+    p: payload.pdfUrl || payload.pdf_url || "",
+    v: payload.videoUrl || payload.video_url || "",
+  };
 
-  return {
-    category: payload.category || "General English",
-    level: payload.level || "Intermediate",
-    duration: payload.duration || "10 min",
-    imageUrl: payload.imageUrl || "",
-    audioUrl: payload.audioUrl || "",
-    pdfUrl: payload.pdfUrl || "",
-    videoUrl: payload.videoUrl || "",
-    sections: normalizeMetadataSections(payload, hasPdf),
-    assignmentTitle: trimToLimit(
+  return Object.entries(assets).reduce((cleaned, [key, value]) => {
+    if (value && value !== primaryFileUrl) {
+      cleaned[key] = value;
+    }
+
+    return cleaned;
+  }, {});
+}
+
+function buildContentMetadata(payload, primaryFileUrl) {
+  return removeEmptyFields({
+    v: 2,
+    c: payload.category || "General English",
+    l: payload.level || "Intermediate",
+    d: payload.duration || "10 min",
+    a: buildAssetMetadata(payload, primaryFileUrl),
+    s: normalizeMetadataSections(payload),
+    at: trimToLimit(
       payload.assignmentTitle || `${payload.title} follow-up task`,
       ASSIGNMENT_TITLE_MAX_CHARS
     ),
-    assignmentInstructions: trimToLimit(
+    ai: trimToLimit(
       payload.assignmentInstructions ||
         "Upload your completed task or reflection for teacher review.",
       ASSIGNMENT_INSTRUCTIONS_MAX_CHARS
     ),
+  });
+}
+
+function getMetadataValue(metadata, compactKey, legacyKey, fallback = "") {
+  return metadata[compactKey] || metadata[legacyKey] || fallback;
+}
+
+function getMetadataAssets(metadata) {
+  const assets = metadata.a || metadata.assets || {};
+
+  return {
+    imageUrl: metadata.imageUrl || assets.i || assets.imageUrl || "",
+    audioUrl: metadata.audioUrl || assets.au || assets.audioUrl || "",
+    pdfUrl: metadata.pdfUrl || assets.p || assets.pdfUrl || "",
+    videoUrl: metadata.videoUrl || assets.v || assets.videoUrl || "",
+  };
+}
+
+function normalizeParsedSections(metadata, fallbackText) {
+  const sourceSections = metadata.s || metadata.sections || [];
+
+  if (!Array.isArray(sourceSections) || !sourceSections.length) {
+    const body = trimToLimit(fallbackText || "", SECTION_BODY_MAX_CHARS);
+    return body ? [{ heading: "Lesson overview", body }] : [];
+  }
+
+  return sourceSections
+    .slice(0, MAX_METADATA_SECTIONS)
+    .map((section, index) => {
+      if (typeof section === "string") {
+        return {
+          heading: `Lesson block ${index + 1}`,
+          body: trimToLimit(section, SECTION_BODY_MAX_CHARS),
+        };
+      }
+
+      if (Array.isArray(section)) {
+        return {
+          heading: trimToLimit(section[0] || `Lesson block ${index + 1}`, 120),
+          body: trimToLimit(section[1] || "", SECTION_BODY_MAX_CHARS),
+        };
+      }
+
+      return {
+        heading: trimToLimit(
+          section.heading || `Lesson block ${index + 1}`,
+          120
+        ),
+        body: trimToLimit(section.body || "", SECTION_BODY_MAX_CHARS),
+      };
+    })
+    .filter((section) => section.heading || section.body);
+}
+
+function getJsonSize(value) {
+  try {
+    return JSON.stringify(value).length;
+  } catch {
+    return 0;
+  }
+}
+
+function getPrimaryFileUrl(payload) {
+  return (
+    payload.fileUrl ||
+    payload.file_url ||
+    payload.pdfUrl ||
+    payload.pdf_url ||
+    payload.audioUrl ||
+    payload.audio_url ||
+    payload.imageUrl ||
+    payload.image_url ||
+    payload.videoUrl ||
+    payload.video_url ||
+    ""
+  );
+}
+
+function getContentPayloadMetrics(payload, metadata, textContent) {
+  return {
+    payloadSize: getJsonSize(payload),
+    textContentLength: textContent.length,
+    sectionsCount: Array.isArray(metadata.s) ? metadata.s.length : 0,
+    lessonNotesLength: String(payload.lessonNotes || payload.lesson_notes || "")
+      .length,
   };
 }
 
@@ -161,14 +341,8 @@ function mapContent(row) {
   }
 
   const metadata = parseContentMetadata(row.text_content);
-  const sections = metadata.sections?.length
-    ? metadata.sections
-    : [
-        {
-          heading: "Lesson overview",
-          body: row.description || "",
-        },
-      ];
+  const assets = getMetadataAssets(metadata);
+  const sections = normalizeParsedSections(metadata, row.description);
 
   return {
     id: row.id,
@@ -182,20 +356,25 @@ function mapContent(row) {
     content_type: row.content_type,
     fileUrl: row.file_url || "",
     file_url: row.file_url || "",
-    category: metadata.category || row.content_type || "General English",
-    level: metadata.level || "Intermediate",
-    duration: metadata.duration || "10 min",
+    category:
+      getMetadataValue(metadata, "c", "category") ||
+      row.content_type ||
+      "General English",
+    level: getMetadataValue(metadata, "l", "level", "Intermediate"),
+    duration: getMetadataValue(metadata, "d", "duration", "10 min"),
     imageUrl:
-      metadata.imageUrl || (row.content_type === "image" ? row.file_url : ""),
+      assets.imageUrl || (row.content_type === "image" ? row.file_url : ""),
     audioUrl:
-      metadata.audioUrl || (row.content_type === "audio" ? row.file_url : ""),
-    pdfUrl: metadata.pdfUrl || (row.content_type === "pdf" ? row.file_url : ""),
+      assets.audioUrl || (row.content_type === "audio" ? row.file_url : ""),
+    pdfUrl: assets.pdfUrl || (row.content_type === "pdf" ? row.file_url : ""),
     videoUrl:
-      metadata.videoUrl || (row.content_type === "video" ? row.file_url : ""),
+      assets.videoUrl || (row.content_type === "video" ? row.file_url : ""),
     sections,
-    assignmentTitle: metadata.assignmentTitle || `${row.title} follow-up task`,
+    assignmentTitle:
+      getMetadataValue(metadata, "at", "assignmentTitle") ||
+      `${row.title} follow-up task`,
     assignmentInstructions:
-      metadata.assignmentInstructions ||
+      getMetadataValue(metadata, "ai", "assignmentInstructions") ||
       "Review this content and complete the assigned homework.",
     createdAt: row.created_at,
     created_at: row.created_at,
@@ -504,31 +683,32 @@ export async function uploadContentFiles(files = {}, options = {}) {
 export async function createContent(payload) {
   assertSupabaseConfig();
 
+  const cleanedPayload = removeEmptyFields(payload);
   const teacherId =
-    payload.teacherId || payload.teacher_id || (await getCurrentUserId());
-  const metadata = buildContentMetadata(payload);
-  const contentType = inferContentType(payload);
+    cleanedPayload.teacherId ||
+    cleanedPayload.teacher_id ||
+    (await getCurrentUserId());
+  const contentType = inferContentType(cleanedPayload);
+  const primaryFileUrl = getPrimaryFileUrl(cleanedPayload);
+  const metadata = buildContentMetadata(cleanedPayload, primaryFileUrl);
   const textContent = serializeContentMetadata(metadata);
-  const record = {
+  const record = removeEmptyFields({
     teacher_id: teacherId,
-    class_id: payload.classId || payload.class_id || null,
-    title: payload.title.trim(),
-    description: trimToLimit(payload.description, DESCRIPTION_MAX_CHARS),
+    class_id: cleanedPayload.classId || cleanedPayload.class_id || null,
+    title: cleanedPayload.title.trim(),
+    description: trimToLimit(cleanedPayload.description, DESCRIPTION_MAX_CHARS),
     content_type: contentType,
-    file_url:
-      payload.fileUrl ||
-      payload.file_url ||
-      payload.pdfUrl ||
-      payload.audioUrl ||
-      payload.imageUrl ||
-      "",
+    file_url: primaryFileUrl,
     text_content: textContent,
-  };
-
-  logContentUploadStep("db insert payload", {
-    ...record,
-    text_content_length: record.text_content.length,
   });
+  const metrics = getContentPayloadMetrics(
+    cleanedPayload,
+    metadata,
+    textContent
+  );
+
+  console.log("content save payload metrics", metrics);
+  logContentUploadStep("db insert payload metrics", metrics);
 
   const { data, error } = await supabase
     .from("contents")
@@ -538,7 +718,11 @@ export async function createContent(payload) {
 
   if (error) {
     console.error("[content-upload] db insert error", {
-      record,
+      record: {
+        ...record,
+        text_content: undefined,
+        text_content_length: record.text_content.length,
+      },
       error,
     });
     throw error;
@@ -551,29 +735,27 @@ export async function createContent(payload) {
 export async function updateContent(id, payload) {
   assertSupabaseConfig();
 
-  const metadata = buildContentMetadata(payload);
-  const contentType = inferContentType(payload);
+  const cleanedPayload = removeEmptyFields(payload);
+  const contentType = inferContentType(cleanedPayload);
+  const primaryFileUrl = getPrimaryFileUrl(cleanedPayload);
+  const metadata = buildContentMetadata(cleanedPayload, primaryFileUrl);
   const textContent = serializeContentMetadata(metadata);
-  const record = {
-    class_id: payload.classId || payload.class_id || null,
-    title: payload.title.trim(),
-    description: trimToLimit(payload.description, DESCRIPTION_MAX_CHARS),
+  const record = removeEmptyFields({
+    class_id: cleanedPayload.classId || cleanedPayload.class_id || null,
+    title: cleanedPayload.title.trim(),
+    description: trimToLimit(cleanedPayload.description, DESCRIPTION_MAX_CHARS),
     content_type: contentType,
-    file_url:
-      payload.fileUrl ||
-      payload.file_url ||
-      payload.pdfUrl ||
-      payload.audioUrl ||
-      payload.imageUrl ||
-      "",
+    file_url: primaryFileUrl,
     text_content: textContent,
-  };
-
-  logContentUploadStep("db update payload", {
-    id,
-    ...record,
-    text_content_length: record.text_content.length,
   });
+  const metrics = getContentPayloadMetrics(
+    cleanedPayload,
+    metadata,
+    textContent
+  );
+
+  console.log("content save payload metrics", { id, ...metrics });
+  logContentUploadStep("db update payload metrics", { id, ...metrics });
 
   const { data, error } = await supabase
     .from("contents")
@@ -583,7 +765,15 @@ export async function updateContent(id, payload) {
     .single();
 
   if (error) {
-    console.error("[content-upload] db update error", { id, record, error });
+    console.error("[content-upload] db update error", {
+      id,
+      record: {
+        ...record,
+        text_content: undefined,
+        text_content_length: record.text_content.length,
+      },
+      error,
+    });
     throw error;
   }
 

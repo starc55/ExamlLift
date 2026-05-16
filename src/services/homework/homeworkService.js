@@ -187,6 +187,47 @@ export async function createHomework(payload) {
   return mapHomework(data);
 }
 
+export async function updateHomework(id, payload) {
+  assertSupabaseConfig();
+
+  const record = {
+    class_id: payload.classId || payload.class_id || null,
+    title: payload.title.trim(),
+    instructions: payload.instructions || "",
+    homework_type: toDbHomeworkType(payload.type || payload.homeworkType),
+    data: {
+      level: payload.level || "Intermediate",
+      attachmentName: payload.attachmentName || "",
+      attachmentUrl: payload.attachmentUrl || "",
+      correctAnswers: payload.correctAnswers || null,
+    },
+    deadline: payload.deadline || null,
+  };
+
+  const { data, error } = await supabase
+    .from("homeworks")
+    .update(record)
+    .eq("id", id)
+    .select("*, profiles:teacher_id(full_name)")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapHomework(data);
+}
+
+export async function deleteHomework(id) {
+  assertSupabaseConfig();
+
+  const { error } = await supabase.from("homeworks").delete().eq("id", id);
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function getAllHomeworkSubmissions() {
   assertSupabaseConfig();
 

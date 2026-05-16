@@ -1960,6 +1960,22 @@ pre {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.teacher-homework-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.teacher-homework-card__footer>div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* ===== Profile Hero And Student Midterm/Final Exam Flow ===== */
 .profile-hero {
   padding: 28px;

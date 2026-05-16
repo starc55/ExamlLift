@@ -254,6 +254,7 @@ pre {
   align-items: center;
   gap: 12px;
   margin-top: 1rem;
+  margin-bottom: 1rem;
 }
 
 .navbar__left,
@@ -644,7 +645,7 @@ pre {
   display: grid;
   gap: 10px;
   min-width: 0;
-  height: fit-content;
+  height: 100%;
 }
 
 .dashboard-card,

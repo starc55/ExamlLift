@@ -66,8 +66,7 @@ const TASK_INSTRUCTION_BY_TYPE = {
   grammar_gap_fill:
     "Complete the sentences using the correct form of the verbs in brackets.",
   choose_correct_form: "Choose the correct form.",
-  vocabulary_matching:
-    "Match the words with the correct definitions.",
+  vocabulary_matching: "Match the words with the correct definitions.",
   correct_mistakes: "Rewrite the sentences correctly.",
   writing_task: "Write your answer.",
   speaking_prompt: "Record your answer.",
@@ -285,7 +284,9 @@ function getQuestionCount(test) {
 
   return test.tasks.reduce((total, task) => {
     if (task.taskType === "vocabulary_matching") {
-      return total + (task.words?.length || test.matchingData?.words?.length || 0);
+      return (
+        total + (task.words?.length || test.matchingData?.words?.length || 0)
+      );
     }
 
     return total + (task.questions?.length || 0);
@@ -358,13 +359,17 @@ function editableTaskFromSaved(task) {
 
 function legacyTaskFromTest(test) {
   const section = test.type || test.section || "grammar";
-  const taskType = test.taskType || test.questionType || getDefaultTaskType(section);
+  const taskType =
+    test.taskType || test.questionType || getDefaultTaskType(section);
 
   if (section === "vocabulary") {
     const matchingData = test.matchingData || {};
     return editableTaskFromSaved({
       taskType: "vocabulary_matching",
-      title: matchingData.title || test.taskTitle || TASK_TITLE_BY_TYPE.vocabulary_matching,
+      title:
+        matchingData.title ||
+        test.taskTitle ||
+        TASK_TITLE_BY_TYPE.vocabulary_matching,
       instructions: matchingData.instruction || test.instructions || "",
       words: matchingData.words || [],
       definitions: matchingData.definitions || [],
@@ -505,7 +510,9 @@ function validateTask(task, index) {
     }
 
     if (payload.words.length !== payload.definitions.length) {
-      errors.push(`Task ${taskNumber}: words va definitions soni teng bo'lishi kerak.`);
+      errors.push(
+        `Task ${taskNumber}: words va definitions soni teng bo'lishi kerak.`
+      );
     }
 
     if (payload.words.some((word) => !word.term || !word.correctAnswer)) {
@@ -550,7 +557,9 @@ function validateTask(task, index) {
 
     if (task.taskType === "correct_mistakes") {
       if (!question.incorrectSentence || !question.correctAnswer) {
-        errors.push(`${label}: incorrect sentence and correct answer required.`);
+        errors.push(
+          `${label}: incorrect sentence and correct answer required.`
+        );
       }
       return;
     }
@@ -593,7 +602,11 @@ function validateForm(form) {
 
   form.tasks.forEach((task, index) => {
     if (!getAllowedTaskTypes(form.section).includes(task.taskType)) {
-      errors.push(`Task ${index + 1}: selected task type bu section uchun ruxsat etilmagan.`);
+      errors.push(
+        `Task ${
+          index + 1
+        }: selected task type bu section uchun ruxsat etilmagan.`
+      );
     }
     errors.push(...validateTask(task, index));
   });
@@ -651,7 +664,9 @@ function TeacherManageTestsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
   const [form, setForm] = useState(createEmptyForm());
-  const [newTaskType, setNewTaskType] = useState(getDefaultTaskType("vocabulary"));
+  const [newTaskType, setNewTaskType] = useState(
+    getDefaultTaskType("vocabulary")
+  );
   const [searchTerm, setSearchTerm] = useState("");
   const [examTypeFilter, setExamTypeFilter] = useState("all");
   const [sectionFilter, setSectionFilter] = useState("all");
@@ -824,7 +839,10 @@ function TeacherManageTestsPage() {
   const addQuestion = (taskId) => {
     const task = form.tasks.find((item) => item.id === taskId);
     updateTask(taskId, {
-      questions: [...(task?.questions || []), createQuestionsForTask(task.taskType)[0]],
+      questions: [
+        ...(task?.questions || []),
+        createQuestionsForTask(task.taskType)[0],
+      ],
     });
   };
 
@@ -949,7 +967,10 @@ function TeacherManageTestsPage() {
   const addDefinition = (taskId) => {
     const task = form.tasks.find((item) => item.id === taskId);
     updateTask(taskId, {
-      definitions: [...task.definitions, createDefinition(task.definitions.length)],
+      definitions: [
+        ...task.definitions,
+        createDefinition(task.definitions.length),
+      ],
     });
   };
 
@@ -1111,7 +1132,9 @@ function TeacherManageTestsPage() {
                 <button
                   type="button"
                   className="danger-button danger-button--subtle"
-                  onClick={() => removeOption(task.id, question.id, optionIndex)}
+                  onClick={() =>
+                    removeOption(task.id, question.id, optionIndex)
+                  }
                   disabled={question.options.length <= 2}
                 >
                   Remove
@@ -1363,7 +1386,9 @@ function TeacherManageTestsPage() {
       <textarea
         rows={5}
         value={task.prompt}
-        onChange={(event) => updateTask(task.id, { prompt: event.target.value })}
+        onChange={(event) =>
+          updateTask(task.id, { prompt: event.target.value })
+        }
       />
     </label>
   );
@@ -1774,7 +1799,10 @@ function TeacherManageTestsPage() {
               <div className="question-builder__heading">
                 <div>
                   <p className="eyebrow">Tasks</p>
-                  <h3>{form.tasks.length} task block{form.tasks.length === 1 ? "" : "s"}</h3>
+                  <h3>
+                    {form.tasks.length} task block
+                    {form.tasks.length === 1 ? "" : "s"}
+                  </h3>
                 </div>
                 <div className="card-actions">
                   <select

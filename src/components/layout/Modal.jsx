@@ -1,3 +1,5 @@
+import { IoIosClose } from "react-icons/io";
+
 function Modal({ isOpen, title, onClose, children, className = "" }) {
   if (!isOpen) {
     return null;
@@ -13,8 +15,12 @@ function Modal({ isOpen, title, onClose, children, className = "" }) {
       >
         <div className="modal-card__header">
           <h3>{title}</h3>
-          <button className="icon-button" onClick={onClose} aria-label="Close modal">
-            x
+          <button
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close modal"
+          >
+            <IoIosClose size={25}/>
           </button>
         </div>
         {children}

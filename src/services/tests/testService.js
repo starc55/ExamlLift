@@ -158,8 +158,8 @@ function getFallbackTest(type, examType) {
   return test || null;
 }
 
-const defaultQuestionTypesByType = {
-  vocabulary: "matching_definitions",
+const defaultTaskTypesByType = {
+  vocabulary: "vocabulary_matching",
   grammar: "multiple_choice",
   reading: "multiple_choice",
   listening: "multiple_choice",
@@ -167,41 +167,81 @@ const defaultQuestionTypesByType = {
   speaking: "speaking_prompt",
 };
 
-function buildMatchingDataFromQuestions(payload, questions) {
-  if (payload.questionType !== "matching_definitions" || !questions.length) {
-    return payload.matchingData || null;
-  }
-
-  const definitions = [];
-  const definitionKeyByText = new Map();
-
-  questions.forEach((question) => {
-    (question.options || []).forEach((option) => {
-      const text = String(option || "").trim();
-
-      if (!text || definitionKeyByText.has(text)) {
-        return;
-      }
-
-      const key = String.fromCharCode(65 + definitions.length);
-      definitionKeyByText.set(text, key);
-      definitions.push({ key, text });
-    });
-  });
-
-  const words = questions.map((question, index) => ({
-    id: question.id || index + 1,
-    term: question.prompt,
-    correct:
-      definitionKeyByText.get(String(question.correctAnswer || "").trim()) || "",
-  }));
+function normalizeVocabularyMatchingData(task, fallback = vocabularyMatchingData) {
+  const source = task || fallback || {};
 
   return {
-    title: payload.title || "Vocabulary matching",
-    instruction: payload.instructions || "",
-    words,
-    definitions,
+    title: source.title || "Vocabulary matching",
+    instruction: source.instruction || source.instructions || "",
+    words: (source.words || []).map((word, index) => ({
+      id: word.id || index + 1,
+      term: word.term || "",
+      correct: word.correct || word.correctAnswer || "",
+      correctAnswer: word.correctAnswer || word.correct || "",
+    })),
+    definitions: source.definitions || [],
   };
+}
+
+function getTasksFromData(type, data, title) {
+  if (Array.isArray(data.tasks) && data.tasks.length) {
+    return data.tasks;
+  }
+
+  const taskType = data.taskType || data.questionType || defaultTaskTypesByType[type];
+
+  if (type === "vocabulary") {
+    return [
+      {
+        ...normalizeVocabularyMatchingData(data.matchingData),
+        taskType: "vocabulary_matching",
+      },
+    ];
+  }
+
+  if (type === "writing" || type === "speaking") {
+    return [
+      {
+        taskType,
+        title: data.taskTitle || title,
+        prompt: data.prompt || "",
+        questions: [],
+      },
+    ];
+  }
+
+  return [
+    {
+      taskType,
+      title: data.taskTitle || title,
+      questions: data.questions || [],
+    },
+  ];
+}
+
+function getMatchingDataFromTask(type, examType, tasks, data) {
+  if (type !== "vocabulary" || examType !== "midterm") {
+    return data.matchingData || null;
+  }
+
+  const vocabularyTask = tasks.find(
+    (task) => task.taskType === "vocabulary_matching"
+  );
+
+  return normalizeVocabularyMatchingData(
+    vocabularyTask || data.matchingData,
+    vocabularyMatchingData
+  );
+}
+
+function getQuestionsFromTask(tasks, data) {
+  const primaryTask = tasks[0];
+
+  if (primaryTask?.questions?.length) {
+    return primaryTask.questions;
+  }
+
+  return data.questions || [];
 }
 
 function mapDbTest(row) {
@@ -212,6 +252,8 @@ function mapDbTest(row) {
   const data = row.data || {};
   const type = row.section || data.type || "mixed";
   const examType = row.exam_type || data.examType || "practice";
+  const tasks = getTasksFromData(type, data, row.title);
+  const primaryTask = tasks[0] || {};
 
   return {
     id: row.id,
@@ -225,21 +267,27 @@ function mapDbTest(row) {
     durationMinutes: Number(data.durationMinutes || 10),
     score: Number(data.score || 10),
     level: data.level || "Intermediate",
+    taskType:
+      primaryTask.taskType ||
+      data.taskType ||
+      data.questionType ||
+      defaultTaskTypesByType[type],
     questionType:
-      data.questionType || defaultQuestionTypesByType[type] || "multiple_choice",
-    prompt: data.prompt || "",
-    taskTitle: data.taskTitle || row.title,
+      primaryTask.taskType ||
+      data.taskType ||
+      data.questionType ||
+      defaultTaskTypesByType[type],
+    prompt: primaryTask.prompt || data.prompt || "",
+    taskTitle: primaryTask.title || data.taskTitle || row.title,
     passageTitle: data.passageTitle || "",
     passage: data.passage || "",
     passageSummary: data.passageSummary || "",
     audioUrl: data.audioUrl || "",
     audioTitle: data.audioTitle || "",
     topic: data.topic || "",
-    questions: data.questions || [],
-    matchingData:
-      type === "vocabulary" && examType === "midterm"
-        ? data.matchingData || vocabularyMatchingData
-        : data.matchingData,
+    questions: getQuestionsFromTask(tasks, data),
+    tasks,
+    matchingData: getMatchingDataFromTask(type, examType, tasks, data),
     createdAt: row.created_at,
   };
 }
@@ -247,13 +295,30 @@ function mapDbTest(row) {
 function toDbRecord(payload, teacherId) {
   const type = payload.type || payload.section || "mixed";
   const examType = payload.section || payload.examType || "practice";
-  const questionType =
-    payload.questionType || defaultQuestionTypesByType[type] || "multiple_choice";
+  const taskType =
+    payload.taskType ||
+    payload.questionType ||
+    defaultTaskTypesByType[type] ||
+    "multiple_choice";
   const questions = payload.questions || [];
-  const matchingData = buildMatchingDataFromQuestions(
-    { ...payload, questionType },
-    questions
+  const tasks = payload.tasks?.length
+    ? payload.tasks
+    : [
+        {
+          taskType,
+          title: payload.taskTitle || payload.title,
+          prompt: payload.prompt || "",
+          questions,
+        },
+      ];
+  const vocabularyTask = tasks.find(
+    (task) => task.taskType === "vocabulary_matching"
   );
+  const matchingData = payload.matchingData
+    ? normalizeVocabularyMatchingData(payload.matchingData)
+    : vocabularyTask
+      ? normalizeVocabularyMatchingData(vocabularyTask)
+      : null;
 
   return {
     teacher_id: payload.teacherId || payload.teacher_id || teacherId,
@@ -266,7 +331,10 @@ function toDbRecord(payload, teacherId) {
       durationMinutes: Number(payload.durationMinutes) || 10,
       score: Number(payload.score) || 10,
       level: payload.level || "Intermediate",
-      questionType,
+      examType,
+      section: type,
+      taskType,
+      questionType: taskType,
       prompt: payload.prompt || "",
       taskTitle: payload.taskTitle || payload.title,
       passageTitle: payload.passageTitle || "",
@@ -276,6 +344,7 @@ function toDbRecord(payload, teacherId) {
       audioTitle: payload.audioTitle || "",
       topic: payload.topic || "",
       questions,
+      tasks,
       matchingData,
     },
   };

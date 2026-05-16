@@ -35,13 +35,97 @@ export function scoreMcqTest(questions, answers, maxScore) {
   };
 }
 
+export function normalizeAnswerText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[.,!?;:'"`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function scoreTextAnswerQuestions(questions, answers, maxScore) {
+  const wrongAnswers = questions.reduce((items, question, index) => {
+    const key = question.id || index;
+    const studentAnswer = answers[key] || "";
+    const correctAnswer = question.correctAnswer || "";
+
+    if (normalizeAnswerText(studentAnswer) === normalizeAnswerText(correctAnswer)) {
+      return items;
+    }
+
+    items.push({
+      id: key,
+      question:
+        question.sentence || question.incorrectSentence || question.prompt || "",
+      studentAnswer,
+      correctAnswer,
+    });
+
+    return items;
+  }, []);
+
+  const totalQuestions = questions.length || 1;
+  const correctCount = totalQuestions - wrongAnswers.length;
+  const percent = Math.round((correctCount / totalQuestions) * 100);
+  const score = Math.round((percent / 100) * (maxScore || totalQuestions));
+
+  return {
+    correctCount,
+    totalQuestions,
+    percent,
+    percentage: percent,
+    score,
+    total: maxScore || totalQuestions,
+    maxScore: maxScore || totalQuestions,
+    answeredCount: Object.values(answers).filter(Boolean).length,
+    wrongAnswers,
+  };
+}
+
+export function scoreGrammarTasks(tasks, answers, maxScore) {
+  const taskResults = tasks.map((task) => {
+    if (
+      task.taskType === "grammar_gap_fill" ||
+      task.taskType === "correct_mistakes"
+    ) {
+      return scoreTextAnswerQuestions(task.questions || [], answers, 0);
+    }
+
+    return scoreMcqTest(task.questions || [], answers, 0);
+  });
+  const totalQuestions =
+    taskResults.reduce((total, result) => total + result.totalQuestions, 0) || 1;
+  const correctCount = taskResults.reduce(
+    (total, result) => total + result.correctCount,
+    0
+  );
+  const wrongAnswers = taskResults.flatMap((result) => result.wrongAnswers);
+  const percent = Math.round((correctCount / totalQuestions) * 100);
+  const score = Math.round((percent / 100) * (maxScore || totalQuestions));
+
+  return {
+    correctCount,
+    totalQuestions,
+    percent,
+    percentage: percent,
+    score,
+    total: maxScore || totalQuestions,
+    maxScore: maxScore || totalQuestions,
+    answeredCount: Object.values(answers).filter(Boolean).length,
+    wrongAnswers,
+    taskResults,
+  };
+}
+
 export function scoreVocabularyMatchingTest(words, definitions, answers, maxScore) {
   const definitionMap = new Map(
     definitions.map((definition) => [definition.key, definition.text])
   );
 
   const incorrectItems = words.reduce((items, word) => {
-    if (answers[word.id] === word.correct) {
+    const correctAnswer = word.correct || word.correctAnswer;
+
+    if (answers[word.id] === correctAnswer) {
       return items;
     }
 
@@ -50,8 +134,8 @@ export function scoreVocabularyMatchingTest(words, definitions, answers, maxScor
       term: word.term,
       selectedKey: answers[word.id] || "",
       selectedText: definitionMap.get(answers[word.id]) || "",
-      correctKey: word.correct,
-      correctText: definitionMap.get(word.correct) || "",
+      correctKey: correctAnswer,
+      correctText: definitionMap.get(correctAnswer) || "",
     });
 
     return items;
@@ -83,6 +167,14 @@ export function scoreVocabularyMatchingTest(words, definitions, answers, maxScor
 
 export function areAllQuestionsAnswered(questions, answers) {
   return questions.every((question) => Boolean(answers[question.id]));
+}
+
+export function areAllTaskQuestionsAnswered(tasks, answers) {
+  return tasks.every((task) =>
+    (task.questions || []).every((question, index) =>
+      Boolean(answers[question.id || index])
+    )
+  );
 }
 
 export function areAllVocabularyAnswersSelected(words, answers) {

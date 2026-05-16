@@ -1091,6 +1091,29 @@ pre {
   background: rgba(255, 252, 248, 0.92);
 }
 
+.question-builder__option-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.question-card input[type="text"],
+.question-card input:not([type]) {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  outline: none;
+  color: var(--text);
+  background: rgba(255, 252, 248, 0.95);
+}
+
+.exam-step[type="button"] {
+  text-align: left;
+  cursor: pointer;
+}
+
 .danger-button--subtle {
   padding: 8px 12px;
   background: rgba(179, 38, 30, 0.1);

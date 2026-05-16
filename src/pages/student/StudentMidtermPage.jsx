@@ -33,9 +33,9 @@ import {
 import { getDefaultStudentClassId } from "../../services/classes/studentClassService";
 import { getTestByType } from "../../services/tests/testService";
 import {
-  areAllQuestionsAnswered,
+  areAllTaskQuestionsAnswered,
   areAllVocabularyAnswersSelected,
-  scoreMcqTest,
+  scoreGrammarTasks,
   scoreVocabularyMatchingTest,
 } from "../../utils/testHelpers";
 
@@ -53,6 +53,19 @@ function StudentMidtermPage() {
   const grammarTest = tests.grammar;
   const speakingTest = tests.speaking;
   const vocabularyData = vocabularyTest?.matchingData || vocabularyMatchingData;
+  const grammarTasks = grammarTest?.tasks?.length
+    ? grammarTest.tasks
+    : [
+        {
+          taskType: grammarTest?.taskType || "multiple_choice",
+          title: grammarTest?.taskTitle || grammarTest?.title || "Grammar",
+          questions: grammarTest?.questions || [],
+        },
+      ];
+  const grammarQuestionCount = grammarTasks.reduce(
+    (total, task) => total + (task.questions?.length || 0),
+    0
+  );
 
   const steps = useMemo(
     () => [
@@ -278,12 +291,12 @@ function StudentMidtermPage() {
       return;
     }
 
-    if (!areAllQuestionsAnswered(grammarTest.questions, grammarAnswers)) {
+    if (!areAllTaskQuestionsAnswered(grammarTasks, grammarAnswers)) {
       setGrammarError("Barcha grammar savollariga javob bering.");
       return;
     }
 
-    const result = scoreMcqTest(grammarTest.questions, grammarAnswers, grammarTest.score);
+    const result = scoreGrammarTasks(grammarTasks, grammarAnswers, grammarTest.score);
     setGrammarResult(result);
     setGrammarLoading(true);
     setGrammarError("");
@@ -367,6 +380,78 @@ function StudentMidtermPage() {
       setSpeakingLoading(false);
     }
   };
+
+  const renderGrammarQuestion = (task, question, index) => {
+    const questionKey = question.id || index;
+
+    if (
+      task.taskType === "grammar_gap_fill" ||
+      task.taskType === "correct_mistakes"
+    ) {
+      return (
+        <article key={questionKey} className="question-card">
+          <h4>
+            {index + 1}.{" "}
+            {task.taskType === "correct_mistakes"
+              ? question.incorrectSentence
+              : question.sentence}
+          </h4>
+          {task.taskType === "grammar_gap_fill" && question.baseWord ? (
+            <span className="pill pill--soft">Base word: {question.baseWord}</span>
+          ) : null}
+          <input
+            value={grammarAnswers[questionKey] || ""}
+            onChange={(event) => {
+              setGrammarAnswers((current) => ({
+                ...current,
+                [questionKey]: event.target.value,
+              }));
+              if (grammarError) {
+                setGrammarError("");
+              }
+            }}
+            placeholder="Javobingizni yozing"
+          />
+        </article>
+      );
+    }
+
+    return (
+      <QuestionCard
+        key={questionKey}
+        index={index}
+        question={{
+          prompt: question.prompt || question.sentence,
+          options: question.options || [],
+        }}
+        namePrefix={`grammar-${task.taskType}`}
+        selectedValue={grammarAnswers[questionKey]}
+        onChange={(value) => {
+          setGrammarAnswers((current) => ({
+            ...current,
+            [questionKey]: value,
+          }));
+          if (grammarError) {
+            setGrammarError("");
+          }
+        }}
+      />
+    );
+  };
+
+  const renderGrammarTask = (task, taskIndex) => (
+    <section key={`${task.taskType}-${taskIndex}`} className="question-list">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Task {taskIndex + 1}</p>
+          <h2>{task.title || task.taskType}</h2>
+        </div>
+      </div>
+      {(task.questions || []).map((question, index) =>
+        renderGrammarQuestion(task, question, index)
+      )}
+    </section>
+  );
 
   const renderStepOverview = (step, index) => (
     <article key={step.key} className="exam-step">
@@ -488,28 +573,9 @@ function StudentMidtermPage() {
               <TestCard
                 title={grammarTest.title}
                 description={grammarTest.instructions}
-                stats={`${grammarTest.questions.length} questions`}
+                stats={`${grammarQuestionCount} questions`}
               >
-                <div className="question-list">
-                  {grammarTest.questions.map((question, index) => (
-                    <QuestionCard
-                      key={question.id}
-                      index={index}
-                      question={{ prompt: question.prompt, options: question.options }}
-                      namePrefix="grammar"
-                      selectedValue={grammarAnswers[question.id]}
-                      onChange={(value) => {
-                        setGrammarAnswers((current) => ({
-                          ...current,
-                          [question.id]: value,
-                        }));
-                        if (grammarError) {
-                          setGrammarError("");
-                        }
-                      }}
-                    />
-                  ))}
-                </div>
+                {grammarTasks.map(renderGrammarTask)}
                 <button className="primary-button" onClick={handleGrammarSubmit}>
                   Submit and continue
                 </button>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   FaChartSimple,
+  FaChevronDown,
   FaClock,
   FaLayerGroup,
   FaListCheck,
@@ -291,6 +292,25 @@ function getQuestionCount(test) {
 
     return total + (task.questions?.length || 0);
   }, 0);
+}
+
+function getEditableTaskItemCount(task) {
+  if (task.taskType === "vocabulary_matching") {
+    return task.words?.length || 0;
+  }
+
+  if (
+    [
+      "writing_task",
+      "speaking_prompt",
+      "picture_comparison",
+      "personal_questions",
+    ].includes(task.taskType)
+  ) {
+    return task.prompt ? 1 : 0;
+  }
+
+  return task.questions?.length || 0;
 }
 
 function editableTaskFromSaved(task) {
@@ -674,6 +694,7 @@ function TeacherManageTestsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
+  const [expandedTaskIds, setExpandedTaskIds] = useState([]);
 
   const availableSections = useMemo(
     () => getAllowedSections(form.examType),
@@ -764,6 +785,7 @@ function TeacherManageTestsPage() {
     const nextForm = createEmptyForm(classes[0]?.id || "");
     setForm(nextForm);
     setNewTaskType(getDefaultTaskType(nextForm.section));
+    setExpandedTaskIds(nextForm.tasks[0]?.id ? [nextForm.tasks[0].id] : []);
     setActiveStep(1);
     setFormError("");
     setIsModalOpen(true);
@@ -773,6 +795,7 @@ function TeacherManageTestsPage() {
     const nextForm = testToForm(test);
     setForm(nextForm);
     setNewTaskType(getDefaultTaskType(nextForm.section));
+    setExpandedTaskIds(nextForm.tasks[0]?.id ? [nextForm.tasks[0].id] : []);
     setActiveStep(1);
     setFormError("");
     setIsModalOpen(true);
@@ -783,20 +806,29 @@ function TeacherManageTestsPage() {
     const nextSection = allowedSections.includes(form.section)
       ? form.section
       : allowedSections[0];
-    setNewTaskType(getDefaultTaskType(nextSection));
+    const nextTaskType = getDefaultTaskType(nextSection);
+    const nextTasks =
+      nextSection === form.section ? form.tasks : [createTask(nextTaskType)];
+
+    setNewTaskType(nextTaskType);
+    setExpandedTaskIds(nextTasks[0]?.id ? [nextTasks[0].id] : []);
     updateForm((current) => ({
       ...current,
       examType,
+      section: nextSection,
+      tasks: nextTasks,
     }));
   };
 
   const handleSectionChange = (section) => {
     const taskType = getDefaultTaskType(section);
+    const nextTask = createTask(taskType);
     setNewTaskType(taskType);
+    setExpandedTaskIds([nextTask.id]);
     updateForm((current) => ({
       ...current,
       section,
-      tasks: [createTask(taskType)],
+      tasks: [nextTask],
     }));
   };
 
@@ -810,13 +842,25 @@ function TeacherManageTestsPage() {
   };
 
   const addTask = () => {
+    const nextTask = createTask(newTaskType);
+    setExpandedTaskIds((current) => [...current, nextTask.id]);
     updateForm((current) => ({
       ...current,
-      tasks: [...current.tasks, createTask(newTaskType)],
+      tasks: [...current.tasks, nextTask],
     }));
   };
 
   const removeTask = (taskId) => {
+    const remainingTasks = form.tasks.filter((task) => task.id !== taskId);
+
+    setExpandedTaskIds((current) => {
+      const nextExpandedIds = current.filter((id) => id !== taskId);
+      if (nextExpandedIds.length) {
+        return nextExpandedIds;
+      }
+
+      return remainingTasks[0]?.id ? [remainingTasks[0].id] : [];
+    });
     updateForm((current) => ({
       ...current,
       tasks:
@@ -824,6 +868,14 @@ function TeacherManageTestsPage() {
           ? current.tasks.filter((task) => task.id !== taskId)
           : current.tasks,
     }));
+  };
+
+  const toggleTask = (taskId) => {
+    setExpandedTaskIds((current) =>
+      current.includes(taskId)
+        ? current.filter((id) => id !== taskId)
+        : [...current, taskId]
+    );
   };
 
   const updateQuestion = (taskId, questionId, patch) => {
@@ -1587,6 +1639,7 @@ function TeacherManageTestsPage() {
         title={form.id ? "Edit test" : "Create test"}
         onClose={() => setIsModalOpen(false)}
         className="modal-card--wide"
+        closeOnOverlayClick={false}
       >
         <form className="modal-form manage-test-form" onSubmit={handleSave}>
           <section className="exam-steps exam-steps--progress">
@@ -1825,61 +1878,99 @@ function TeacherManageTestsPage() {
                   </button>
                 </div>
               </div>
-              {form.tasks.map((task, taskIndex) => (
-                <article key={task.id} className="question-builder__card">
-                  <div className="question-builder__card-header">
-                    <span className="pill">
-                      Task {taskIndex + 1}: {formatLabel(task.taskType)}
-                    </span>
-                    <button
-                      type="button"
-                      className="danger-button danger-button--subtle"
-                      onClick={() => removeTask(task.id)}
-                      disabled={form.tasks.length === 1}
-                    >
-                      Remove task
-                    </button>
-                  </div>
-                  <div className="form-grid">
-                    <label>
-                      Task type
-                      <select
-                        value={task.taskType}
-                        onChange={(event) =>
-                          updateTask(task.id, createTask(event.target.value))
-                        }
+              {form.tasks.map((task, taskIndex) => {
+                const isExpanded = expandedTaskIds.includes(task.id);
+                const panelId = `task-panel-${task.id}`;
+
+                return (
+                  <article
+                    key={task.id}
+                    className={`question-builder__card question-builder__task-card ${
+                      isExpanded
+                        ? "question-builder__task-card--open"
+                        : "question-builder__task-card--closed"
+                    }`}
+                  >
+                    <div className="question-builder__card-header question-builder__task-header">
+                      <button
+                        type="button"
+                        className="question-builder__task-toggle"
+                        onClick={() => toggleTask(task.id)}
+                        aria-expanded={isExpanded}
+                        aria-controls={panelId}
                       >
-                        {availableTaskTypes.map((taskType) => (
-                          <option key={taskType} value={taskType}>
-                            {formatLabel(taskType)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Task title
-                      <input
-                        value={task.title}
-                        onChange={(event) =>
-                          updateTask(task.id, { title: event.target.value })
-                        }
-                      />
-                    </label>
-                    <label className="form-grid__wide">
-                      Task instructions
-                      <input
-                        value={task.instructions}
-                        onChange={(event) =>
-                          updateTask(task.id, {
-                            instructions: event.target.value,
-                          })
-                        }
-                      />
-                    </label>
-                  </div>
-                  {renderTaskBody(task)}
-                </article>
-              ))}
+                        <FaChevronDown />
+                        <span className="question-builder__task-title">
+                          <span className="pill">
+                            Task {taskIndex + 1}: {formatLabel(task.taskType)}
+                          </span>
+                          <span className="question-builder__task-summary">
+                            {task.title || formatLabel(task.taskType)} -{" "}
+                            {getEditableTaskItemCount(task)} item
+                            {getEditableTaskItemCount(task) === 1 ? "" : "s"}
+                          </span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="danger-button danger-button--subtle"
+                        onClick={() => removeTask(task.id)}
+                        disabled={form.tasks.length === 1}
+                      >
+                        Remove task
+                      </button>
+                    </div>
+                    {isExpanded ? (
+                      <div id={panelId} className="question-builder__task-panel">
+                        <div className="form-grid">
+                          <label>
+                            Task type
+                            <select
+                              value={task.taskType}
+                              onChange={(event) => {
+                                const nextTask = createTask(event.target.value);
+                                updateTask(task.id, {
+                                  ...nextTask,
+                                  id: task.id,
+                                });
+                              }}
+                            >
+                              {availableTaskTypes.map((taskType) => (
+                                <option key={taskType} value={taskType}>
+                                  {formatLabel(taskType)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Task title
+                            <input
+                              value={task.title}
+                              onChange={(event) =>
+                                updateTask(task.id, {
+                                  title: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="form-grid__wide">
+                            Task instructions
+                            <input
+                              value={task.instructions}
+                              onChange={(event) =>
+                                updateTask(task.id, {
+                                  instructions: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
+                        {renderTaskBody(task)}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
             </section>
           ) : null}
 

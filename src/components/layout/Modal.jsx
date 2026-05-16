@@ -1,12 +1,23 @@
 import { IoIosClose } from "react-icons/io";
 
-function Modal({ isOpen, title, onClose, children, className = "" }) {
+function Modal({
+  isOpen,
+  title,
+  onClose,
+  children,
+  className = "",
+  closeOnOverlayClick = true,
+}) {
   if (!isOpen) {
     return null;
   }
 
   return (
-    <div className="modal-overlay" role="presentation" onClick={onClose}>
+    <div
+      className="modal-overlay"
+      role="presentation"
+      onClick={closeOnOverlayClick ? onClose : undefined}
+    >
       <div
         className={`modal-card ${className}`.trim()}
         role="dialog"

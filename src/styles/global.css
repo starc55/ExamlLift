@@ -1092,6 +1092,54 @@ pre {
   background: rgba(255, 252, 248, 0.92);
 }
 
+.question-builder__task-card {
+  align-content: start;
+}
+
+.question-builder__task-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 260px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.question-builder__task-toggle svg {
+  flex-shrink: 0;
+  color: var(--accent-deep);
+  transition: transform 0.2s ease;
+}
+
+.question-builder__task-card--closed .question-builder__task-toggle svg {
+  transform: rotate(-90deg);
+}
+
+.question-builder__task-title {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.question-builder__task-summary {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.question-builder__task-panel {
+  display: grid;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(202, 162, 77, 0.2);
+}
+
 .question-builder__option-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

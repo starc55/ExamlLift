@@ -35,6 +35,7 @@ import { getTestByType } from "../../services/tests/testService";
 import {
   areAllTaskQuestionsAnswered,
   areAllVocabularyAnswersSelected,
+  getTaskQuestionAnswerKey,
   scoreGrammarTasks,
   scoreVocabularyMatchingTest,
 } from "../../utils/testHelpers";
@@ -381,8 +382,8 @@ function StudentMidtermPage() {
     }
   };
 
-  const renderGrammarQuestion = (task, question, index) => {
-    const questionKey = question.id || index;
+  const renderGrammarQuestion = (task, taskIndex, question, index) => {
+    const questionKey = getTaskQuestionAnswerKey(task, taskIndex, question, index);
 
     if (
       task.taskType === "grammar_gap_fill" ||
@@ -448,7 +449,7 @@ function StudentMidtermPage() {
         </div>
       </div>
       {(task.questions || []).map((question, index) =>
-        renderGrammarQuestion(task, question, index)
+        renderGrammarQuestion(task, taskIndex, question, index)
       )}
     </section>
   );

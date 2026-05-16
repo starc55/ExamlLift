@@ -49,20 +49,32 @@ const TASK_TYPES_BY_SECTION = {
   speaking: ["speaking_prompt", "picture_comparison", "personal_questions"],
 };
 const TASK_TITLE_BY_TYPE = {
-  multiple_choice: "TASK 1 - MULTIPLE CHOICE. Choose the correct answer.",
-  grammar_gap_fill:
-    "TASK 2 - GAP FILL. Complete the sentences using the correct form of the verbs in brackets.",
-  choose_correct_form: "TASK 3 - Choose the correct answer.",
-  vocabulary_matching:
-    "TASK 4 - MATCHING. Match the words (1-10) with the correct definitions (a-j).",
-  correct_mistakes:
-    "TASK 5 - CORRECT THE MISTAKES. Rewrite the sentences correctly.",
+  multiple_choice: "TASK 1 - MULTIPLE CHOICE",
+  grammar_gap_fill: "TASK 2 - GAP FILL",
+  choose_correct_form: "TASK 3 - Choose the correct answer",
+  vocabulary_matching: "TASK 4 - MATCHING",
+  correct_mistakes: "TASK 5 - CORRECT THE MISTAKES",
   writing_task: "Writing task",
   speaking_prompt: "Speaking prompt",
   picture_comparison: "Picture comparison",
   personal_questions: "Personal questions",
   true_false_not_given: "True / False / Not Given",
   matching: "Matching",
+};
+const TASK_INSTRUCTION_BY_TYPE = {
+  multiple_choice: "Choose the correct answer.",
+  grammar_gap_fill:
+    "Complete the sentences using the correct form of the verbs in brackets.",
+  choose_correct_form: "Choose the correct form.",
+  vocabulary_matching:
+    "Match the words with the correct definitions.",
+  correct_mistakes: "Rewrite the sentences correctly.",
+  writing_task: "Write your answer.",
+  speaking_prompt: "Record your answer.",
+  picture_comparison: "Compare the pictures and explain your answer.",
+  personal_questions: "Answer the personal questions.",
+  true_false_not_given: "Choose the correct statement type.",
+  matching: "Match the items correctly.",
 };
 const EXAM_TYPE_LABELS = {
   midterm: "Midterm Control",
@@ -156,14 +168,6 @@ function createMatchingWord(index) {
   };
 }
 
-function createDefaultDefinitions(count = 10) {
-  return Array.from({ length: count }, (_, index) => createDefinition(index));
-}
-
-function createDefaultWords(count = 10) {
-  return Array.from({ length: count }, (_, index) => createMatchingWord(index));
-}
-
 function getAllowedSections(examType) {
   return SECTION_OPTIONS_BY_EXAM_TYPE[examType] || SECTION_OPTIONS;
 }
@@ -199,6 +203,21 @@ function createQuestionsForTask(taskType) {
   return [createChoiceQuestion(taskType)];
 }
 
+function createTask(taskType) {
+  return {
+    id: createId("task"),
+    taskType,
+    title: TASK_TITLE_BY_TYPE[taskType] || formatLabel(taskType),
+    instructions: TASK_INSTRUCTION_BY_TYPE[taskType] || "",
+    prompt: "",
+    questions: createQuestionsForTask(taskType),
+    words: Array.from({ length: 10 }, (_, index) => createMatchingWord(index)),
+    definitions: Array.from({ length: 10 }, (_, index) =>
+      createDefinition(index)
+    ),
+  };
+}
+
 function createEmptyForm(classId = "") {
   const section = "vocabulary";
   const taskType = getDefaultTaskType(section);
@@ -209,18 +228,36 @@ function createEmptyForm(classId = "") {
     title: "",
     examType: "midterm",
     section,
-    taskType,
-    taskTitle: TASK_TITLE_BY_TYPE[taskType],
     instructions: "",
     durationMinutes: 10,
     score: 10,
-    prompt: "",
     passageTitle: "",
     passage: "",
     audioUrl: "",
-    questions: createQuestionsForTask(taskType),
-    words: createDefaultWords(),
-    definitions: createDefaultDefinitions(),
+    tasks: [createTask(taskType)],
+  };
+}
+
+function normalizeTaskForType(task) {
+  const taskType = task.taskType;
+
+  if (taskType === "vocabulary_matching") {
+    return {
+      ...createTask(taskType),
+      ...task,
+      words: task.words?.length ? task.words : createTask(taskType).words,
+      definitions: task.definitions?.length
+        ? task.definitions
+        : createTask(taskType).definitions,
+    };
+  }
+
+  return {
+    ...createTask(taskType),
+    ...task,
+    questions: task.questions?.length
+      ? task.questions
+      : createQuestionsForTask(taskType),
   };
 }
 
@@ -230,97 +267,133 @@ function normalizeFormForRules(form) {
     ? form.section
     : allowedSections[0];
   const allowedTaskTypes = getAllowedTaskTypes(section);
-  const taskType = allowedTaskTypes.includes(form.taskType)
-    ? form.taskType
-    : allowedTaskTypes[0];
-  const didTaskChange = taskType !== form.taskType;
+  const safeTasks = (form.tasks || [])
+    .filter((task) => allowedTaskTypes.includes(task.taskType))
+    .map(normalizeTaskForType);
 
   return {
     ...form,
     section,
-    taskType,
-    taskTitle:
-      didTaskChange || !form.taskTitle
-        ? TASK_TITLE_BY_TYPE[taskType]
-        : form.taskTitle,
-    questions: didTaskChange
-      ? createQuestionsForTask(taskType)
-      : form.questions?.length
-      ? form.questions
-      : createQuestionsForTask(taskType),
-    words: form.words?.length ? form.words : createDefaultWords(),
-    definitions: form.definitions?.length
-      ? form.definitions
-      : createDefaultDefinitions(),
+    tasks: safeTasks.length ? safeTasks : [createTask(allowedTaskTypes[0])],
   };
 }
 
-function getTaskFromTest(test) {
-  return test.tasks?.[0] || null;
-}
-
 function getQuestionCount(test) {
-  const task = getTaskFromTest(test);
-
-  if (task?.taskType === "vocabulary_matching") {
-    return task.words?.length || test.matchingData?.words?.length || 0;
+  if (!test.tasks?.length) {
+    return test.questions?.length || 0;
   }
 
-  return task?.questions?.length || test.questions?.length || 0;
+  return test.tasks.reduce((total, task) => {
+    if (task.taskType === "vocabulary_matching") {
+      return total + (task.words?.length || test.matchingData?.words?.length || 0);
+    }
+
+    return total + (task.questions?.length || 0);
+  }, 0);
 }
 
-function taskToEditableQuestions(task, fallbackQuestions = []) {
-  const taskType = task?.taskType || "multiple_choice";
-  const questions = task?.questions?.length
-    ? task.questions
-    : fallbackQuestions;
+function editableTaskFromSaved(task) {
+  const base = createTask(task.taskType || "multiple_choice");
 
-  if (taskType === "grammar_gap_fill") {
-    return questions.length
-      ? questions.map((question) => ({
+  if (task.taskType === "vocabulary_matching") {
+    return {
+      ...base,
+      ...task,
+      words: (task.words || []).map((word, index) => ({
+        id: word.id || index + 1,
+        term: word.term || "",
+        correctAnswer: word.correctAnswer || word.correct || "",
+      })),
+      definitions: task.definitions || base.definitions,
+    };
+  }
+
+  if (task.taskType === "grammar_gap_fill") {
+    return {
+      ...base,
+      ...task,
+      questions: (task.questions?.length ? task.questions : base.questions).map(
+        (question) => ({
           id: question.id || createId("gap"),
           sentence: question.sentence || question.prompt || "",
           baseWord: question.baseWord || "",
           correctAnswer: question.correctAnswer || "",
-        }))
-      : [createGapQuestion()];
+        })
+      ),
+    };
   }
 
-  if (taskType === "correct_mistakes") {
-    return questions.length
-      ? questions.map((question) => ({
+  if (task.taskType === "correct_mistakes") {
+    return {
+      ...base,
+      ...task,
+      questions: (task.questions?.length ? task.questions : base.questions).map(
+        (question) => ({
           id: question.id || createId("mistake"),
           incorrectSentence:
             question.incorrectSentence || question.prompt || "",
           correctAnswer: question.correctAnswer || "",
-        }))
-      : [createMistakeQuestion()];
+        })
+      ),
+    };
   }
 
-  return questions.length
-    ? questions.map((question) => ({
+  return {
+    ...base,
+    ...task,
+    questions: (task.questions?.length ? task.questions : base.questions).map(
+      (question) => ({
         id: question.id || createId("question"),
         prompt: question.prompt || question.sentence || "",
         sentence: question.sentence || question.prompt || "",
         options: normalizeOptions(
           question.options,
-          taskType === "choose_correct_form" ? 2 : 4
+          task.taskType === "choose_correct_form" ? 2 : 4
         ),
         correctAnswer: question.correctAnswer || "",
-      }))
-    : createQuestionsForTask(taskType);
+      })
+    ),
+  };
+}
+
+function legacyTaskFromTest(test) {
+  const section = test.type || test.section || "grammar";
+  const taskType = test.taskType || test.questionType || getDefaultTaskType(section);
+
+  if (section === "vocabulary") {
+    const matchingData = test.matchingData || {};
+    return editableTaskFromSaved({
+      taskType: "vocabulary_matching",
+      title: matchingData.title || test.taskTitle || TASK_TITLE_BY_TYPE.vocabulary_matching,
+      instructions: matchingData.instruction || test.instructions || "",
+      words: matchingData.words || [],
+      definitions: matchingData.definitions || [],
+    });
+  }
+
+  if (["writing", "speaking"].includes(section)) {
+    return editableTaskFromSaved({
+      taskType,
+      title: test.taskTitle || TASK_TITLE_BY_TYPE[taskType],
+      instructions: test.instructions || "",
+      prompt: test.prompt || "",
+      questions: [],
+    });
+  }
+
+  return editableTaskFromSaved({
+    taskType,
+    title: test.taskTitle || TASK_TITLE_BY_TYPE[taskType],
+    instructions: test.instructions || "",
+    questions: test.questions || [],
+  });
 }
 
 function testToForm(test) {
   const section = test.type || test.section || "vocabulary";
-  const task = getTaskFromTest(test);
-  const taskType =
-    task?.taskType ||
-    test.taskType ||
-    test.questionType ||
-    getDefaultTaskType(section);
-  const matchingData =
-    task?.taskType === "vocabulary_matching" ? task : test.matchingData;
+  const tasks = test.tasks?.length
+    ? test.tasks.map(editableTaskFromSaved)
+    : [legacyTaskFromTest(test)];
 
   return normalizeFormForRules({
     ...createEmptyForm(test.classId || ""),
@@ -329,63 +402,42 @@ function testToForm(test) {
     title: test.title || "",
     examType: test.examType || test.section || "practice",
     section,
-    taskType,
-    taskTitle: task?.title || test.taskTitle || TASK_TITLE_BY_TYPE[taskType],
     instructions: test.instructions || "",
     durationMinutes: test.durationMinutes || 10,
     score: test.score || 10,
-    prompt: task?.prompt || test.prompt || "",
     passageTitle: test.passageTitle || "",
     passage: test.passage || "",
     audioUrl: test.audioUrl || "",
-    questions: taskToEditableQuestions(task, test.questions),
-    words: matchingData?.words?.length
-      ? matchingData.words.map((word, index) => ({
-          id: word.id || index + 1,
-          term: word.term || "",
-          correctAnswer: word.correctAnswer || word.correct || "",
-        }))
-      : createDefaultWords(),
-    definitions: matchingData?.definitions?.length
-      ? matchingData.definitions.map((definition, index) => ({
-          key: definition.key || DEFINITION_KEYS[index] || String(index + 1),
-          text: definition.text || "",
-        }))
-      : createDefaultDefinitions(),
+    tasks,
   });
 }
 
-function questionLabel(taskType) {
-  if (taskType === "grammar_gap_fill") return "Sentence with blank";
-  if (taskType === "choose_correct_form") return "Sentence";
-  return "Question";
-}
-
-function getTaskPayload(form) {
+function getTaskPayload(task) {
   const baseTask = {
-    taskType: form.taskType,
-    title: form.taskTitle || TASK_TITLE_BY_TYPE[form.taskType],
+    taskType: task.taskType,
+    title: task.title.trim() || TASK_TITLE_BY_TYPE[task.taskType],
+    instructions: task.instructions.trim(),
   };
 
-  if (form.taskType === "vocabulary_matching") {
+  if (task.taskType === "vocabulary_matching") {
     return {
       ...baseTask,
-      words: form.words.map((word, index) => ({
+      words: task.words.map((word, index) => ({
         id: word.id || index + 1,
         term: word.term.trim(),
         correctAnswer: word.correctAnswer,
       })),
-      definitions: form.definitions.map((definition, index) => ({
+      definitions: task.definitions.map((definition, index) => ({
         key: definition.key || DEFINITION_KEYS[index] || String(index + 1),
         text: definition.text.trim(),
       })),
     };
   }
 
-  if (form.taskType === "grammar_gap_fill") {
+  if (task.taskType === "grammar_gap_fill") {
     return {
       ...baseTask,
-      questions: form.questions.map((question, index) => ({
+      questions: task.questions.map((question, index) => ({
         id: question.id || index + 1,
         sentence: question.sentence.trim(),
         baseWord: question.baseWord.trim(),
@@ -394,10 +446,10 @@ function getTaskPayload(form) {
     };
   }
 
-  if (form.taskType === "correct_mistakes") {
+  if (task.taskType === "correct_mistakes") {
     return {
       ...baseTask,
-      questions: form.questions.map((question, index) => ({
+      questions: task.questions.map((question, index) => ({
         id: question.id || index + 1,
         incorrectSentence: question.incorrectSentence.trim(),
         correctAnswer: question.correctAnswer.trim(),
@@ -411,20 +463,20 @@ function getTaskPayload(form) {
       "speaking_prompt",
       "picture_comparison",
       "personal_questions",
-    ].includes(form.taskType)
+    ].includes(task.taskType)
   ) {
     return {
       ...baseTask,
-      prompt: form.prompt.trim(),
+      prompt: task.prompt.trim(),
       questions: [],
     };
   }
 
   return {
     ...baseTask,
-    questions: form.questions.map((question, index) => ({
+    questions: task.questions.map((question, index) => ({
       id: question.id || index + 1,
-      prompt: (form.taskType === "choose_correct_form"
+      prompt: (task.taskType === "choose_correct_form"
         ? question.sentence
         : question.prompt
       ).trim(),
@@ -438,40 +490,30 @@ function getTaskPayload(form) {
   };
 }
 
-function validateForm(form) {
+function validateTask(task, index) {
   const errors = [];
-  const task = getTaskPayload(form);
+  const taskNumber = index + 1;
+  const payload = getTaskPayload(task);
 
-  if (!form.title.trim()) errors.push("Title required.");
-  if (!form.examType) errors.push("Exam type required.");
-  if (!form.section) errors.push("Section required.");
-  if (!form.taskType) errors.push("Task type required.");
-
-  if (!getAllowedSections(form.examType).includes(form.section)) {
-    errors.push("Selected section bu exam type uchun ruxsat etilmagan.");
+  if (!payload.title) {
+    errors.push(`Task ${taskNumber}: task title required.`);
   }
 
-  if (!getAllowedTaskTypes(form.section).includes(form.taskType)) {
-    errors.push("Selected task type bu section uchun ruxsat etilmagan.");
-  }
-
-  if (form.taskType === "vocabulary_matching") {
-    if (task.words.length < 2 || task.definitions.length < 2) {
-      errors.push(
-        "Vocabulary matching uchun kamida 2 ta word va definition kerak."
-      );
+  if (task.taskType === "vocabulary_matching") {
+    if (payload.words.length < 2 || payload.definitions.length < 2) {
+      errors.push(`Task ${taskNumber}: kamida 2 ta word va definition kerak.`);
     }
 
-    if (task.words.length !== task.definitions.length) {
-      errors.push("Words va definitions soni teng bo'lishi kerak.");
+    if (payload.words.length !== payload.definitions.length) {
+      errors.push(`Task ${taskNumber}: words va definitions soni teng bo'lishi kerak.`);
     }
 
-    if (task.words.some((word) => !word.term || !word.correctAnswer)) {
-      errors.push("Har bir word uchun term va correct mapping majburiy.");
+    if (payload.words.some((word) => !word.term || !word.correctAnswer)) {
+      errors.push(`Task ${taskNumber}: har bir word uchun mapping majburiy.`);
     }
 
-    if (task.definitions.some((definition) => !definition.text)) {
-      errors.push("Har bir definition matni majburiy.");
+    if (payload.definitions.some((definition) => !definition.text)) {
+      errors.push(`Task ${taskNumber}: har bir definition matni majburiy.`);
     }
 
     return errors;
@@ -483,33 +525,32 @@ function validateForm(form) {
       "speaking_prompt",
       "picture_comparison",
       "personal_questions",
-    ].includes(form.taskType)
+    ].includes(task.taskType)
   ) {
-    if (!task.prompt) errors.push("Prompt required.");
+    if (!payload.prompt) {
+      errors.push(`Task ${taskNumber}: prompt required.`);
+    }
     return errors;
   }
 
-  if (!task.questions?.length) {
-    errors.push("At least 1 question required.");
+  if (!payload.questions?.length) {
+    errors.push(`Task ${taskNumber}: at least 1 question required.`);
+    return errors;
   }
 
-  task.questions.forEach((question, index) => {
-    if (form.taskType === "grammar_gap_fill") {
+  payload.questions.forEach((question, questionIndex) => {
+    const label = `Task ${taskNumber}, question ${questionIndex + 1}`;
+
+    if (task.taskType === "grammar_gap_fill") {
       if (!question.sentence || !question.correctAnswer) {
-        errors.push(
-          `Question ${index + 1}: sentence and correct answer required.`
-        );
+        errors.push(`${label}: sentence and correct answer required.`);
       }
       return;
     }
 
-    if (form.taskType === "correct_mistakes") {
+    if (task.taskType === "correct_mistakes") {
       if (!question.incorrectSentence || !question.correctAnswer) {
-        errors.push(
-          `Question ${
-            index + 1
-          }: incorrect sentence and correct answer required.`
-        );
+        errors.push(`${label}: incorrect sentence and correct answer required.`);
       }
       return;
     }
@@ -518,40 +559,68 @@ function validateForm(form) {
     const optionKeys = question.options.map((option) => option.key);
 
     if (!question.prompt) {
-      errors.push(`Question ${index + 1}: question/sentence required.`);
+      errors.push(`${label}: question/sentence required.`);
     }
 
     if (optionCount < 2) {
-      errors.push(`Question ${index + 1}: minimum 2 options required.`);
+      errors.push(`${label}: minimum 2 options required.`);
     }
 
     if (!question.correctAnswer) {
-      errors.push(`Question ${index + 1}: correct answer required.`);
+      errors.push(`${label}: correct answer required.`);
     } else if (!optionKeys.includes(question.correctAnswer)) {
-      errors.push(`Question ${index + 1}: correct answer must match an option.`);
+      errors.push(`${label}: correct answer must match an option.`);
     }
   });
 
   return errors;
 }
 
+function validateForm(form) {
+  const errors = [];
+
+  if (!form.title.trim()) errors.push("Title required.");
+  if (!form.examType) errors.push("Exam type required.");
+  if (!form.section) errors.push("Section required.");
+
+  if (!getAllowedSections(form.examType).includes(form.section)) {
+    errors.push("Selected section bu exam type uchun ruxsat etilmagan.");
+  }
+
+  if (!form.tasks.length) {
+    errors.push("At least 1 task required.");
+  }
+
+  form.tasks.forEach((task, index) => {
+    if (!getAllowedTaskTypes(form.section).includes(task.taskType)) {
+      errors.push(`Task ${index + 1}: selected task type bu section uchun ruxsat etilmagan.`);
+    }
+    errors.push(...validateTask(task, index));
+  });
+
+  return errors;
+}
+
 function buildPayload(form) {
-  const task = getTaskPayload(form);
-  const questions = task.questions || [];
-  const matchingData =
-    task.taskType === "vocabulary_matching"
-      ? {
-          title: task.title,
-          instruction: form.instructions,
-          words: task.words.map((word) => ({
-            id: word.id,
-            term: word.term,
-            correct: word.correctAnswer,
-            correctAnswer: word.correctAnswer,
-          })),
-          definitions: task.definitions,
-        }
-      : null;
+  const tasks = form.tasks.map(getTaskPayload);
+  const questions = tasks.flatMap((task) => task.questions || []);
+  const vocabularyTask = tasks.find(
+    (task) => task.taskType === "vocabulary_matching"
+  );
+  const promptTask = tasks.find((task) => task.prompt);
+  const matchingData = vocabularyTask
+    ? {
+        title: vocabularyTask.title,
+        instruction: vocabularyTask.instructions || form.instructions,
+        words: vocabularyTask.words.map((word) => ({
+          id: word.id,
+          term: word.term,
+          correct: word.correctAnswer,
+          correctAnswer: word.correctAnswer,
+        })),
+        definitions: vocabularyTask.definitions,
+      }
+    : null;
 
   return {
     id: form.id,
@@ -560,17 +629,17 @@ function buildPayload(form) {
     examType: form.examType,
     section: form.examType,
     type: form.section,
-    taskType: form.taskType,
-    questionType: form.taskType,
-    taskTitle: task.title,
+    taskType: tasks[0]?.taskType || getDefaultTaskType(form.section),
+    questionType: tasks[0]?.taskType || getDefaultTaskType(form.section),
+    taskTitle: tasks[0]?.title || form.title,
     instructions: form.instructions,
     durationMinutes: form.durationMinutes,
     score: form.score,
-    prompt: task.prompt || form.prompt,
+    prompt: promptTask?.prompt || "",
     passageTitle: form.passageTitle,
     passage: form.passage,
     audioUrl: form.audioUrl,
-    tasks: [task],
+    tasks,
     questions,
     matchingData,
   };
@@ -582,6 +651,7 @@ function TeacherManageTestsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
   const [form, setForm] = useState(createEmptyForm());
+  const [newTaskType, setNewTaskType] = useState(getDefaultTaskType("vocabulary"));
   const [searchTerm, setSearchTerm] = useState("");
   const [examTypeFilter, setExamTypeFilter] = useState("all");
   const [sectionFilter, setSectionFilter] = useState("all");
@@ -598,10 +668,6 @@ function TeacherManageTestsPage() {
     () => getAllowedTaskTypes(form.section),
     [form.section]
   );
-  const selectedTaskTitle =
-    form.taskTitle ||
-    TASK_TITLE_BY_TYPE[form.taskType] ||
-    formatLabel(form.taskType);
   const currentValidationErrors = validateForm(normalizeFormForRules(form));
   const midtermCount = tests.filter(
     (test) => test.section === "midterm"
@@ -616,13 +682,14 @@ function TeacherManageTestsPage() {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
     return tests.filter((test) => {
+      const taskTypes = (test.tasks || []).map((task) => task.taskType);
       const searchableValues = [
         test.title,
         test.instructions,
         test.type,
         test.section,
         test.examType,
-        getTaskFromTest(test)?.taskType,
+        ...taskTypes,
       ];
       const matchesSearch =
         !normalizedSearch ||
@@ -679,20 +746,29 @@ function TeacherManageTestsPage() {
   };
 
   const openCreateModal = () => {
-    setForm(createEmptyForm(classes[0]?.id || ""));
+    const nextForm = createEmptyForm(classes[0]?.id || "");
+    setForm(nextForm);
+    setNewTaskType(getDefaultTaskType(nextForm.section));
     setActiveStep(1);
     setFormError("");
     setIsModalOpen(true);
   };
 
   const openEditModal = (test) => {
-    setForm(testToForm(test));
+    const nextForm = testToForm(test);
+    setForm(nextForm);
+    setNewTaskType(getDefaultTaskType(nextForm.section));
     setActiveStep(1);
     setFormError("");
     setIsModalOpen(true);
   };
 
   const handleExamTypeChange = (examType) => {
+    const allowedSections = getAllowedSections(examType);
+    const nextSection = allowedSections.includes(form.section)
+      ? form.section
+      : allowedSections[0];
+    setNewTaskType(getDefaultTaskType(nextSection));
     updateForm((current) => ({
       ...current,
       examType,
@@ -701,172 +777,202 @@ function TeacherManageTestsPage() {
 
   const handleSectionChange = (section) => {
     const taskType = getDefaultTaskType(section);
+    setNewTaskType(taskType);
     updateForm((current) => ({
       ...current,
       section,
-      taskType,
-      taskTitle: TASK_TITLE_BY_TYPE[taskType],
-      questions: createQuestionsForTask(taskType),
+      tasks: [createTask(taskType)],
     }));
   };
 
-  const handleTaskTypeChange = (taskType) => {
+  const updateTask = (taskId, patch) => {
     updateForm((current) => ({
       ...current,
-      taskType,
-      taskTitle: TASK_TITLE_BY_TYPE[taskType],
-      questions: createQuestionsForTask(taskType),
-    }));
-  };
-
-  const updateQuestion = (questionId, patch) => {
-    updateForm((current) => ({
-      ...current,
-      questions: current.questions.map((question) =>
-        question.id === questionId ? { ...question, ...patch } : question
+      tasks: current.tasks.map((task) =>
+        task.id === taskId ? normalizeTaskForType({ ...task, ...patch }) : task
       ),
     }));
   };
 
-  const updateOption = (questionId, optionIndex, text) => {
+  const addTask = () => {
     updateForm((current) => ({
       ...current,
-      questions: current.questions.map((question) => {
-        if (question.id !== questionId) return question;
-
-        const options = question.options.map((option, index) =>
-          index === optionIndex ? { ...option, text } : option
-        );
-
-        return { ...question, options };
-      }),
+      tasks: [...current.tasks, createTask(newTaskType)],
     }));
   };
 
-  const addQuestion = () => {
+  const removeTask = (taskId) => {
     updateForm((current) => ({
       ...current,
+      tasks:
+        current.tasks.length > 1
+          ? current.tasks.filter((task) => task.id !== taskId)
+          : current.tasks,
+    }));
+  };
+
+  const updateQuestion = (taskId, questionId, patch) => {
+    updateTask(taskId, {
+      questions: form.tasks
+        .find((task) => task.id === taskId)
+        ?.questions.map((question) =>
+          question.id === questionId ? { ...question, ...patch } : question
+        ),
+    });
+  };
+
+  const addQuestion = (taskId) => {
+    const task = form.tasks.find((item) => item.id === taskId);
+    updateTask(taskId, {
+      questions: [...(task?.questions || []), createQuestionsForTask(task.taskType)[0]],
+    });
+  };
+
+  const duplicateQuestion = (taskId, questionId) => {
+    const task = form.tasks.find((item) => item.id === taskId);
+    const question = task?.questions.find((item) => item.id === questionId);
+
+    if (!task || !question) return;
+
+    updateTask(taskId, {
       questions: [
-        ...current.questions,
-        createQuestionsForTask(current.taskType)[0],
+        ...task.questions,
+        {
+          ...question,
+          id: createId("question"),
+          options: question.options?.map((option) => ({ ...option })) || [],
+        },
       ],
-    }));
+    });
   };
 
-  const removeQuestion = (questionId) => {
-    updateForm((current) => ({
-      ...current,
+  const removeQuestion = (taskId, questionId) => {
+    const task = form.tasks.find((item) => item.id === taskId);
+
+    updateTask(taskId, {
       questions:
-        current.questions.length > 1
-          ? current.questions.filter((question) => question.id !== questionId)
-          : current.questions,
-    }));
+        task?.questions.length > 1
+          ? task.questions.filter((question) => question.id !== questionId)
+          : task?.questions || [],
+    });
   };
 
-  const addOption = (questionId) => {
-    updateForm((current) => ({
-      ...current,
-      questions: current.questions.map((question) => {
-        if (question.id !== questionId) return question;
-
-        return {
-          ...question,
-          options: [...question.options, createOption(question.options.length)],
-        };
-      }),
-    }));
-  };
-
-  const removeOption = (questionId, optionIndex) => {
-    updateForm((current) => ({
-      ...current,
-      questions: current.questions.map((question) => {
-        if (question.id !== questionId || question.options.length <= 2) {
-          return question;
-        }
-
-        const removedKey = question.options[optionIndex]?.key;
-        const options = normalizeOptions(
-          question.options.filter((_, index) => index !== optionIndex),
-          2
-        );
-
-        return {
-          ...question,
-          options,
-          correctAnswer:
-            question.correctAnswer === removedKey ? "" : question.correctAnswer,
-        };
-      }),
-    }));
-  };
-
-  const updateWord = (index, patch) => {
-    updateForm((current) => ({
-      ...current,
-      words: current.words.map((word, wordIndex) =>
-        wordIndex === index ? { ...word, ...patch } : word
-      ),
-    }));
-  };
-
-  const addWord = () => {
-    updateForm((current) => ({
-      ...current,
-      words: [...current.words, createMatchingWord(current.words.length)],
-    }));
-  };
-
-  const removeWord = (index) => {
-    updateForm((current) => ({
-      ...current,
-      words:
-        current.words.length > 2
-          ? current.words.filter((_, wordIndex) => wordIndex !== index)
-          : current.words,
-    }));
-  };
-
-  const updateDefinition = (index, text) => {
-    updateForm((current) => ({
-      ...current,
-      definitions: current.definitions.map((definition, definitionIndex) =>
-        definitionIndex === index ? { ...definition, text } : definition
-      ),
-    }));
-  };
-
-  const addDefinition = () => {
-    updateForm((current) => ({
-      ...current,
-      definitions: [
-        ...current.definitions,
-        createDefinition(current.definitions.length),
-      ],
-    }));
-  };
-
-  const removeDefinition = (index) => {
-    updateForm((current) => {
-      if (current.definitions.length <= 2) return current;
-
-      const removedKey = current.definitions[index]?.key;
-      const definitions = current.definitions
-        .filter((_, definitionIndex) => definitionIndex !== index)
-        .map((definition, definitionIndex) => ({
-          ...definition,
-          key: DEFINITION_KEYS[definitionIndex] || String(definitionIndex + 1),
-        }));
+  const updateOption = (taskId, questionId, optionIndex, text) => {
+    const task = form.tasks.find((item) => item.id === taskId);
+    const questions = task?.questions.map((question) => {
+      if (question.id !== questionId) return question;
 
       return {
-        ...current,
-        definitions,
-        words: current.words.map((word) => ({
-          ...word,
-          correctAnswer:
-            word.correctAnswer === removedKey ? "" : word.correctAnswer,
-        })),
+        ...question,
+        options: question.options.map((option, index) =>
+          index === optionIndex ? { ...option, text } : option
+        ),
       };
+    });
+
+    updateTask(taskId, { questions });
+  };
+
+  const addOption = (taskId, questionId) => {
+    const task = form.tasks.find((item) => item.id === taskId);
+    const questions = task?.questions.map((question) => {
+      if (question.id !== questionId) return question;
+
+      return {
+        ...question,
+        options: [...question.options, createOption(question.options.length)],
+      };
+    });
+
+    updateTask(taskId, { questions });
+  };
+
+  const removeOption = (taskId, questionId, optionIndex) => {
+    const task = form.tasks.find((item) => item.id === taskId);
+    const questions = task?.questions.map((question) => {
+      if (question.id !== questionId || question.options.length <= 2) {
+        return question;
+      }
+
+      const removedKey = question.options[optionIndex]?.key;
+      const options = normalizeOptions(
+        question.options.filter((_, index) => index !== optionIndex),
+        2
+      );
+
+      return {
+        ...question,
+        options,
+        correctAnswer:
+          question.correctAnswer === removedKey ? "" : question.correctAnswer,
+      };
+    });
+
+    updateTask(taskId, { questions });
+  };
+
+  const updateWord = (taskId, index, patch) => {
+    const task = form.tasks.find((item) => item.id === taskId);
+    updateTask(taskId, {
+      words: task.words.map((word, wordIndex) =>
+        wordIndex === index ? { ...word, ...patch } : word
+      ),
+    });
+  };
+
+  const addWord = (taskId) => {
+    const task = form.tasks.find((item) => item.id === taskId);
+    updateTask(taskId, {
+      words: [...task.words, createMatchingWord(task.words.length)],
+    });
+  };
+
+  const removeWord = (taskId, index) => {
+    const task = form.tasks.find((item) => item.id === taskId);
+    updateTask(taskId, {
+      words:
+        task.words.length > 2
+          ? task.words.filter((_, wordIndex) => wordIndex !== index)
+          : task.words,
+    });
+  };
+
+  const updateDefinition = (taskId, index, text) => {
+    const task = form.tasks.find((item) => item.id === taskId);
+    updateTask(taskId, {
+      definitions: task.definitions.map((definition, definitionIndex) =>
+        definitionIndex === index ? { ...definition, text } : definition
+      ),
+    });
+  };
+
+  const addDefinition = (taskId) => {
+    const task = form.tasks.find((item) => item.id === taskId);
+    updateTask(taskId, {
+      definitions: [...task.definitions, createDefinition(task.definitions.length)],
+    });
+  };
+
+  const removeDefinition = (taskId, index) => {
+    const task = form.tasks.find((item) => item.id === taskId);
+
+    if (task.definitions.length <= 2) return;
+
+    const removedKey = task.definitions[index]?.key;
+    const definitions = task.definitions
+      .filter((_, definitionIndex) => definitionIndex !== index)
+      .map((definition, definitionIndex) => ({
+        ...definition,
+        key: DEFINITION_KEYS[definitionIndex] || String(definitionIndex + 1),
+      }));
+
+    updateTask(taskId, {
+      definitions,
+      words: task.words.map((word) => ({
+        ...word,
+        correctAnswer:
+          word.correctAnswer === removedKey ? "" : word.correctAnswer,
+      })),
     });
   };
 
@@ -901,7 +1007,7 @@ function TeacherManageTestsPage() {
 
     if (validationErrors.length) {
       setFormError(validationErrors[0]);
-      setActiveStep(5);
+      setActiveStep(4);
       setSaving(false);
       return;
     }
@@ -930,35 +1036,49 @@ function TeacherManageTestsPage() {
     }
   };
 
-  const renderChoiceBuilder = () => (
+  const renderQuestionActions = (task, question) => (
+    <div className="card-actions">
+      <button
+        type="button"
+        className="secondary-button"
+        onClick={() => duplicateQuestion(task.id, question.id)}
+      >
+        Duplicate
+      </button>
+      <button
+        type="button"
+        className="danger-button danger-button--subtle"
+        onClick={() => removeQuestion(task.id, question.id)}
+        disabled={task.questions.length === 1}
+      >
+        Remove
+      </button>
+    </div>
+  );
+
+  const renderChoiceBuilder = (task) => (
     <div className="manage-test-form__stack">
-      {form.questions.map((question, questionIndex) => (
+      {task.questions.map((question, questionIndex) => (
         <div key={question.id} className="question-builder__card">
           <div className="question-builder__card-header">
             <span className="pill pill--soft">
               Question {questionIndex + 1}
             </span>
-            <button
-              type="button"
-              className="danger-button danger-button--subtle"
-              onClick={() => removeQuestion(question.id)}
-              disabled={form.questions.length === 1}
-            >
-              Remove
-            </button>
+            {renderQuestionActions(task, question)}
           </div>
           <label>
-            {questionLabel(form.taskType)}
+            {task.taskType === "choose_correct_form" ? "Sentence" : "Question"}
             <input
               value={
-                form.taskType === "choose_correct_form"
+                task.taskType === "choose_correct_form"
                   ? question.sentence
                   : question.prompt
               }
               onChange={(event) =>
                 updateQuestion(
+                  task.id,
                   question.id,
-                  form.taskType === "choose_correct_form"
+                  task.taskType === "choose_correct_form"
                     ? {
                         sentence: event.target.value,
                         prompt: event.target.value,
@@ -969,7 +1089,6 @@ function TeacherManageTestsPage() {
                       }
                 )
               }
-              placeholder={questionLabel(form.taskType)}
             />
           </label>
           <div className="manage-test-form__stack">
@@ -980,15 +1099,19 @@ function TeacherManageTestsPage() {
                   <input
                     value={option.text}
                     onChange={(event) =>
-                      updateOption(question.id, optionIndex, event.target.value)
+                      updateOption(
+                        task.id,
+                        question.id,
+                        optionIndex,
+                        event.target.value
+                      )
                     }
-                    placeholder={`Option ${option.key}`}
                   />
                 </label>
                 <button
                   type="button"
                   className="danger-button danger-button--subtle"
-                  onClick={() => removeOption(question.id, optionIndex)}
+                  onClick={() => removeOption(task.id, question.id, optionIndex)}
                   disabled={question.options.length <= 2}
                 >
                   Remove
@@ -999,7 +1122,7 @@ function TeacherManageTestsPage() {
           <button
             type="button"
             className="secondary-button card-link"
-            onClick={() => addOption(question.id)}
+            onClick={() => addOption(task.id, question.id)}
           >
             Add option
           </button>
@@ -1008,7 +1131,7 @@ function TeacherManageTestsPage() {
             <select
               value={question.correctAnswer}
               onChange={(event) =>
-                updateQuestion(question.id, {
+                updateQuestion(task.id, question.id, {
                   correctAnswer: event.target.value,
                 })
               }
@@ -1026,7 +1149,7 @@ function TeacherManageTestsPage() {
       <button
         type="button"
         className="secondary-button secondary-button--with-icon card-link"
-        onClick={addQuestion}
+        onClick={() => addQuestion(task.id)}
       >
         <FaPlus />
         <span>Add question</span>
@@ -1034,27 +1157,22 @@ function TeacherManageTestsPage() {
     </div>
   );
 
-  const renderGapBuilder = () => (
+  const renderGapBuilder = (task) => (
     <div className="manage-test-form__stack">
-      {form.questions.map((question, index) => (
+      {task.questions.map((question, index) => (
         <div key={question.id} className="question-builder__card">
           <div className="question-builder__card-header">
             <span className="pill pill--soft">Sentence {index + 1}</span>
-            <button
-              type="button"
-              className="danger-button danger-button--subtle"
-              onClick={() => removeQuestion(question.id)}
-              disabled={form.questions.length === 1}
-            >
-              Remove
-            </button>
+            {renderQuestionActions(task, question)}
           </div>
           <label>
             Sentence with blank
             <input
               value={question.sentence}
               onChange={(event) =>
-                updateQuestion(question.id, { sentence: event.target.value })
+                updateQuestion(task.id, question.id, {
+                  sentence: event.target.value,
+                })
               }
               placeholder="My younger brother ___ (be) interested..."
             />
@@ -1065,7 +1183,9 @@ function TeacherManageTestsPage() {
               <input
                 value={question.baseWord}
                 onChange={(event) =>
-                  updateQuestion(question.id, { baseWord: event.target.value })
+                  updateQuestion(task.id, question.id, {
+                    baseWord: event.target.value,
+                  })
                 }
                 placeholder="be"
               />
@@ -1075,7 +1195,7 @@ function TeacherManageTestsPage() {
               <input
                 value={question.correctAnswer}
                 onChange={(event) =>
-                  updateQuestion(question.id, {
+                  updateQuestion(task.id, question.id, {
                     correctAnswer: event.target.value,
                   })
                 }
@@ -1088,7 +1208,7 @@ function TeacherManageTestsPage() {
       <button
         type="button"
         className="secondary-button secondary-button--with-icon card-link"
-        onClick={addQuestion}
+        onClick={() => addQuestion(task.id)}
       >
         <FaPlus />
         <span>Add sentence</span>
@@ -1096,31 +1216,23 @@ function TeacherManageTestsPage() {
     </div>
   );
 
-  const renderMistakeBuilder = () => (
+  const renderMistakeBuilder = (task) => (
     <div className="manage-test-form__stack">
-      {form.questions.map((question, index) => (
+      {task.questions.map((question, index) => (
         <div key={question.id} className="question-builder__card">
           <div className="question-builder__card-header">
             <span className="pill pill--soft">Sentence {index + 1}</span>
-            <button
-              type="button"
-              className="danger-button danger-button--subtle"
-              onClick={() => removeQuestion(question.id)}
-              disabled={form.questions.length === 1}
-            >
-              Remove
-            </button>
+            {renderQuestionActions(task, question)}
           </div>
           <label>
             Incorrect sentence
             <input
               value={question.incorrectSentence}
               onChange={(event) =>
-                updateQuestion(question.id, {
+                updateQuestion(task.id, question.id, {
                   incorrectSentence: event.target.value,
                 })
               }
-              placeholder="She don't believe..."
             />
           </label>
           <label>
@@ -1128,11 +1240,10 @@ function TeacherManageTestsPage() {
             <input
               value={question.correctAnswer}
               onChange={(event) =>
-                updateQuestion(question.id, {
+                updateQuestion(task.id, question.id, {
                   correctAnswer: event.target.value,
                 })
               }
-              placeholder="She doesn't believe..."
             />
           </label>
         </div>
@@ -1140,7 +1251,7 @@ function TeacherManageTestsPage() {
       <button
         type="button"
         className="secondary-button secondary-button--with-icon card-link"
-        onClick={addQuestion}
+        onClick={() => addQuestion(task.id)}
       >
         <FaPlus />
         <span>Add sentence</span>
@@ -1148,7 +1259,7 @@ function TeacherManageTestsPage() {
     </div>
   );
 
-  const renderVocabularyBuilder = () => (
+  const renderVocabularyBuilder = (task) => (
     <div className="manage-test-form__stack">
       <div className="question-builder__heading">
         <div>
@@ -1156,13 +1267,17 @@ function TeacherManageTestsPage() {
           <h3>Words and definitions</h3>
         </div>
         <div className="card-actions">
-          <button type="button" className="secondary-button" onClick={addWord}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => addWord(task.id)}
+          >
             Add word
           </button>
           <button
             type="button"
             className="secondary-button"
-            onClick={addDefinition}
+            onClick={() => addDefinition(task.id)}
           >
             Add definition
           </button>
@@ -1171,7 +1286,7 @@ function TeacherManageTestsPage() {
       <div className="form-grid">
         <section className="question-builder__card">
           <h4>Words</h4>
-          {form.words.map((word, index) => (
+          {task.words.map((word, index) => (
             <div
               key={`${word.id}-${index}`}
               className="question-builder__option-row"
@@ -1181,9 +1296,8 @@ function TeacherManageTestsPage() {
                 <input
                   value={word.term}
                   onChange={(event) =>
-                    updateWord(index, { term: event.target.value })
+                    updateWord(task.id, index, { term: event.target.value })
                   }
-                  placeholder="volunteer"
                 />
               </label>
               <label>
@@ -1191,11 +1305,13 @@ function TeacherManageTestsPage() {
                 <select
                   value={word.correctAnswer}
                   onChange={(event) =>
-                    updateWord(index, { correctAnswer: event.target.value })
+                    updateWord(task.id, index, {
+                      correctAnswer: event.target.value,
+                    })
                   }
                 >
                   <option value="">Select</option>
-                  {form.definitions.map((definition) => (
+                  {task.definitions.map((definition) => (
                     <option key={definition.key} value={definition.key}>
                       {definition.key}
                     </option>
@@ -1205,8 +1321,8 @@ function TeacherManageTestsPage() {
               <button
                 type="button"
                 className="danger-button danger-button--subtle"
-                onClick={() => removeWord(index)}
-                disabled={form.words.length <= 2}
+                onClick={() => removeWord(task.id, index)}
+                disabled={task.words.length <= 2}
               >
                 Remove
               </button>
@@ -1215,23 +1331,22 @@ function TeacherManageTestsPage() {
         </section>
         <section className="question-builder__card">
           <h4>Definitions</h4>
-          {form.definitions.map((definition, index) => (
+          {task.definitions.map((definition, index) => (
             <div key={definition.key} className="question-builder__option-row">
               <label>
                 Definition {definition.key}
                 <input
                   value={definition.text}
                   onChange={(event) =>
-                    updateDefinition(index, event.target.value)
+                    updateDefinition(task.id, index, event.target.value)
                   }
-                  placeholder="a person who works without payment"
                 />
               </label>
               <button
                 type="button"
                 className="danger-button danger-button--subtle"
-                onClick={() => removeDefinition(index)}
-                disabled={form.definitions.length <= 2}
+                onClick={() => removeDefinition(task.id, index)}
+                disabled={task.definitions.length <= 2}
               >
                 Remove
               </button>
@@ -1242,40 +1357,45 @@ function TeacherManageTestsPage() {
     </div>
   );
 
-  const renderPromptBuilder = () => (
+  const renderPromptBuilder = (task) => (
     <label>
       Prompt
       <textarea
         rows={5}
-        value={form.prompt}
-        onChange={(event) =>
-          updateForm((current) => ({ ...current, prompt: event.target.value }))
-        }
-        placeholder="Task prompt"
+        value={task.prompt}
+        onChange={(event) => updateTask(task.id, { prompt: event.target.value })}
       />
     </label>
   );
 
-  const renderTaskBuilder = () => {
-    if (form.taskType === "vocabulary_matching")
-      return renderVocabularyBuilder();
-    if (form.taskType === "grammar_gap_fill") return renderGapBuilder();
-    if (form.taskType === "correct_mistakes") return renderMistakeBuilder();
+  const renderTaskBody = (task) => {
+    if (task.taskType === "vocabulary_matching") {
+      return renderVocabularyBuilder(task);
+    }
+
+    if (task.taskType === "grammar_gap_fill") {
+      return renderGapBuilder(task);
+    }
+
+    if (task.taskType === "correct_mistakes") {
+      return renderMistakeBuilder(task);
+    }
+
     if (
       [
         "writing_task",
         "speaking_prompt",
         "picture_comparison",
         "personal_questions",
-      ].includes(form.taskType)
+      ].includes(task.taskType)
     ) {
-      return renderPromptBuilder();
+      return renderPromptBuilder(task);
     }
 
-    return renderChoiceBuilder();
+    return renderChoiceBuilder(task);
   };
 
-  const previewTask = getTaskPayload(normalizeFormForRules(form));
+  const previewTasks = normalizeFormForRules(form).tasks.map(getTaskPayload);
 
   return (
     <div className="page-stack">
@@ -1366,65 +1486,61 @@ function TeacherManageTestsPage() {
       </section>
 
       <section className="manage-tests-grid">
-        {filteredTests.map((test) => {
-          const task = getTaskFromTest(test);
+        {filteredTests.map((test) => (
+          <article key={test.id} className="card manage-test-card">
+            <div className="manage-test-card__top">
+              <span
+                className={`manage-test-card__type manage-test-card__type--${test.type}`}
+              >
+                {formatLabel(test.type)}
+              </span>
+              <span className="pill pill--soft">
+                {EXAM_TYPE_LABELS[test.section] || formatLabel(test.section)}
+              </span>
+            </div>
 
-          return (
-            <article key={test.id} className="card manage-test-card">
-              <div className="manage-test-card__top">
-                <span
-                  className={`manage-test-card__type manage-test-card__type--${test.type}`}
-                >
-                  {formatLabel(test.type)}
-                </span>
-                <span className="pill pill--soft">
-                  {EXAM_TYPE_LABELS[test.section] || formatLabel(test.section)}
-                </span>
-              </div>
+            <div className="manage-test-card__body">
+              <h3>{test.title}</h3>
+              <p>{test.instructions || "No instructions yet."}</p>
+            </div>
 
-              <div className="manage-test-card__body">
-                <h3>{test.title}</h3>
-                <p>{test.instructions || "No instructions yet."}</p>
-              </div>
+            <div className="manage-test-card__meta">
+              <span>
+                <FaListCheck />
+                {getQuestionCount(test)} items
+              </span>
+              <span>
+                <FaChartSimple />
+                {test.score} pts
+              </span>
+              <span>
+                <FaClock />
+                {test.durationMinutes || 0} min
+              </span>
+              <span>
+                <FaLayerGroup />
+                {test.tasks?.length || 1} tasks
+              </span>
+            </div>
 
-              <div className="manage-test-card__meta">
-                <span>
-                  <FaListCheck />
-                  {getQuestionCount(test)} items
-                </span>
-                <span>
-                  <FaChartSimple />
-                  {test.score} pts
-                </span>
-                <span>
-                  <FaClock />
-                  {test.durationMinutes || 0} min
-                </span>
-                <span>
-                  <FaLayerGroup />
-                  {task?.taskType ? formatLabel(task.taskType) : "Task open"}
-                </span>
-              </div>
-
-              <div className="manage-test-card__actions">
-                <button
-                  className="secondary-button secondary-button--with-icon"
-                  onClick={() => openEditModal(test)}
-                >
-                  <FaPenToSquare />
-                  <span>Edit</span>
-                </button>
-                <button
-                  className="danger-button danger-button--with-icon"
-                  onClick={() => handleDelete(test.id)}
-                >
-                  <FaTrashCan />
-                  <span>Delete</span>
-                </button>
-              </div>
-            </article>
-          );
-        })}
+            <div className="manage-test-card__actions">
+              <button
+                className="secondary-button secondary-button--with-icon"
+                onClick={() => openEditModal(test)}
+              >
+                <FaPenToSquare />
+                <span>Edit</span>
+              </button>
+              <button
+                className="danger-button danger-button--with-icon"
+                onClick={() => handleDelete(test.id)}
+              >
+                <FaTrashCan />
+                <span>Delete</span>
+              </button>
+            </div>
+          </article>
+        ))}
 
         {!filteredTests.length ? (
           <section className="card empty-state manage-tests-empty">
@@ -1449,29 +1565,25 @@ function TeacherManageTestsPage() {
       >
         <form className="modal-form manage-test-form" onSubmit={handleSave}>
           <section className="exam-steps exam-steps--progress">
-            {[
-              "Exam type",
-              "Section",
-              "Question type",
-              "Task builder",
-              "Preview",
-            ].map((label, index) => {
-              const step = index + 1;
+            {["Exam type", "Section", "Task builder", "Preview"].map(
+              (label, index) => {
+                const step = index + 1;
 
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  className={`exam-step ${
-                    activeStep === step ? "exam-step--active" : ""
-                  }`}
-                  onClick={() => goToStep(step)}
-                >
-                  <span className="pill pill--soft">Step {step}</span>
-                  <strong>{label}</strong>
-                </button>
-              );
-            })}
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    className={`exam-step ${
+                      activeStep === step ? "exam-step--active" : ""
+                    }`}
+                    onClick={() => goToStep(step)}
+                  >
+                    <span className="pill pill--soft">Step {step}</span>
+                    <strong>{label}</strong>
+                  </button>
+                );
+              }
+            )}
           </section>
 
           <ErrorAlert message={formError} />
@@ -1532,34 +1644,9 @@ function TeacherManageTestsPage() {
           ) : null}
 
           {activeStep === 3 ? (
-            <section className="manage-test-form__section">
-              <div>
-                <p className="eyebrow">Step 3</p>
-                <h3>Question type</h3>
-              </div>
-              <div className="form-grid">
-                {availableTaskTypes.map((taskType) => (
-                  <button
-                    key={taskType}
-                    type="button"
-                    className={
-                      form.taskType === taskType
-                        ? "primary-button"
-                        : "secondary-button"
-                    }
-                    onClick={() => handleTaskTypeChange(taskType)}
-                  >
-                    {formatLabel(taskType)}
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {activeStep === 4 ? (
             <section className="manage-test-form__section question-builder">
               <div>
-                <p className="eyebrow">Step 4</p>
+                <p className="eyebrow">Step 3</p>
                 <h3>Task builder</h3>
               </div>
               <div className="form-grid">
@@ -1584,7 +1671,7 @@ function TeacherManageTestsPage() {
                   </select>
                 </label>
                 <label>
-                  Title
+                  Test title
                   <input
                     value={form.title}
                     onChange={(event) =>
@@ -1594,18 +1681,6 @@ function TeacherManageTestsPage() {
                       }))
                     }
                     required
-                  />
-                </label>
-                <label>
-                  Task title
-                  <input
-                    value={form.taskTitle}
-                    onChange={(event) =>
-                      updateForm((current) => ({
-                        ...current,
-                        taskTitle: event.target.value,
-                      }))
-                    }
                   />
                 </label>
                 <label>
@@ -1639,7 +1714,7 @@ function TeacherManageTestsPage() {
                   />
                 </label>
                 <label className="form-grid__wide">
-                  Instructions
+                  Test instructions
                   <input
                     value={form.instructions}
                     onChange={(event) =>
@@ -1693,24 +1768,103 @@ function TeacherManageTestsPage() {
                         audioUrl: event.target.value,
                       }))
                     }
-                    placeholder="Paste uploaded audio URL or data URI"
                   />
                 </label>
               ) : null}
-              {renderTaskBuilder()}
+              <div className="question-builder__heading">
+                <div>
+                  <p className="eyebrow">Tasks</p>
+                  <h3>{form.tasks.length} task block{form.tasks.length === 1 ? "" : "s"}</h3>
+                </div>
+                <div className="card-actions">
+                  <select
+                    value={newTaskType}
+                    onChange={(event) => setNewTaskType(event.target.value)}
+                  >
+                    {availableTaskTypes.map((taskType) => (
+                      <option key={taskType} value={taskType}>
+                        {formatLabel(taskType)}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="primary-button primary-button--with-icon"
+                    onClick={addTask}
+                  >
+                    <FaPlus />
+                    <span>Add Task</span>
+                  </button>
+                </div>
+              </div>
+              {form.tasks.map((task, taskIndex) => (
+                <article key={task.id} className="question-builder__card">
+                  <div className="question-builder__card-header">
+                    <span className="pill">
+                      Task {taskIndex + 1}: {formatLabel(task.taskType)}
+                    </span>
+                    <button
+                      type="button"
+                      className="danger-button danger-button--subtle"
+                      onClick={() => removeTask(task.id)}
+                      disabled={form.tasks.length === 1}
+                    >
+                      Remove task
+                    </button>
+                  </div>
+                  <div className="form-grid">
+                    <label>
+                      Task type
+                      <select
+                        value={task.taskType}
+                        onChange={(event) =>
+                          updateTask(task.id, createTask(event.target.value))
+                        }
+                      >
+                        {availableTaskTypes.map((taskType) => (
+                          <option key={taskType} value={taskType}>
+                            {formatLabel(taskType)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Task title
+                      <input
+                        value={task.title}
+                        onChange={(event) =>
+                          updateTask(task.id, { title: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label className="form-grid__wide">
+                      Task instructions
+                      <input
+                        value={task.instructions}
+                        onChange={(event) =>
+                          updateTask(task.id, {
+                            instructions: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
+                  {renderTaskBody(task)}
+                </article>
+              ))}
             </section>
           ) : null}
 
-          {activeStep === 5 ? (
+          {activeStep === 4 ? (
             <section className="manage-test-form__section">
               <div>
-                <p className="eyebrow">Step 5</p>
+                <p className="eyebrow">Step 4</p>
                 <h3>Preview + Save</h3>
               </div>
               <div className="content-action-preview__meta">
                 <span>{EXAM_TYPE_LABELS[form.examType]}</span>
                 <span>{formatLabel(form.section)}</span>
-                <span>{formatLabel(form.taskType)}</span>
+                <span>{form.tasks.length} tasks</span>
                 <span>{form.score} pts</span>
               </div>
               <div className="prose-block">
@@ -1718,8 +1872,8 @@ function TeacherManageTestsPage() {
                 <p>{form.instructions || "No instructions yet."}</p>
               </div>
               <div className="prose-block">
-                <h4>{selectedTaskTitle}</h4>
-                <pre>{JSON.stringify(previewTask, null, 2)}</pre>
+                <h4>Tasks JSON</h4>
+                <pre>{JSON.stringify(previewTasks, null, 2)}</pre>
               </div>
               {currentValidationErrors.length ? (
                 <p className="error-text">{currentValidationErrors[0]}</p>
@@ -1746,7 +1900,7 @@ function TeacherManageTestsPage() {
                 Back
               </button>
             ) : null}
-            {activeStep < 5 ? (
+            {activeStep < 4 ? (
               <button
                 className="primary-button"
                 type="button"

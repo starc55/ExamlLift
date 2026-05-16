@@ -43,6 +43,10 @@ export function normalizeAnswerText(value) {
     .trim();
 }
 
+export function getTaskQuestionAnswerKey(task, taskIndex, question, questionIndex) {
+  return `${task.taskType || "task"}-${taskIndex}-${question.id || questionIndex}`;
+}
+
 export function scoreTextAnswerQuestions(questions, answers, maxScore) {
   const wrongAnswers = questions.reduce((items, question, index) => {
     const key = question.id || index;
@@ -83,23 +87,50 @@ export function scoreTextAnswerQuestions(questions, answers, maxScore) {
 }
 
 export function scoreGrammarTasks(tasks, answers, maxScore) {
-  const taskResults = tasks.map((task) => {
-    if (
-      task.taskType === "grammar_gap_fill" ||
-      task.taskType === "correct_mistakes"
-    ) {
-      return scoreTextAnswerQuestions(task.questions || [], answers, 0);
+  const questions = tasks.flatMap((task, taskIndex) =>
+    (task.questions || []).map((question, questionIndex) => ({
+      task,
+      taskIndex,
+      question,
+      questionIndex,
+    }))
+  );
+  const wrongAnswers = questions.reduce((items, item) => {
+    const key = getTaskQuestionAnswerKey(
+      item.task,
+      item.taskIndex,
+      item.question,
+      item.questionIndex
+    );
+    const studentAnswer = answers[key] || "";
+    const correctAnswer = item.question.correctAnswer || "";
+    const isTextTask =
+      item.task.taskType === "grammar_gap_fill" ||
+      item.task.taskType === "correct_mistakes";
+    const isCorrect = isTextTask
+      ? normalizeAnswerText(studentAnswer) === normalizeAnswerText(correctAnswer)
+      : studentAnswer === correctAnswer;
+
+    if (isCorrect) {
+      return items;
     }
 
-    return scoreMcqTest(task.questions || [], answers, 0);
-  });
-  const totalQuestions =
-    taskResults.reduce((total, result) => total + result.totalQuestions, 0) || 1;
-  const correctCount = taskResults.reduce(
-    (total, result) => total + result.correctCount,
-    0
-  );
-  const wrongAnswers = taskResults.flatMap((result) => result.wrongAnswers);
+    items.push({
+      id: key,
+      question:
+        item.question.sentence ||
+        item.question.incorrectSentence ||
+        item.question.prompt ||
+        "",
+      taskType: item.task.taskType,
+      studentAnswer,
+      correctAnswer,
+    });
+
+    return items;
+  }, []);
+  const totalQuestions = questions.length || 1;
+  const correctCount = totalQuestions - wrongAnswers.length;
   const percent = Math.round((correctCount / totalQuestions) * 100);
   const score = Math.round((percent / 100) * (maxScore || totalQuestions));
 
@@ -113,7 +144,6 @@ export function scoreGrammarTasks(tasks, answers, maxScore) {
     maxScore: maxScore || totalQuestions,
     answeredCount: Object.values(answers).filter(Boolean).length,
     wrongAnswers,
-    taskResults,
   };
 }
 
@@ -170,9 +200,13 @@ export function areAllQuestionsAnswered(questions, answers) {
 }
 
 export function areAllTaskQuestionsAnswered(tasks, answers) {
-  return tasks.every((task) =>
-    (task.questions || []).every((question, index) =>
-      Boolean(answers[question.id || index])
+  return tasks.every((task, taskIndex) =>
+    (task.questions || []).every((question, questionIndex) =>
+      Boolean(
+        answers[
+          getTaskQuestionAnswerKey(task, taskIndex, question, questionIndex)
+        ]
+      )
     )
   );
 }

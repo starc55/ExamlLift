@@ -20,8 +20,148 @@ import {
 } from "../../services/tests/testService";
 import { useSafeAsyncEffect } from "../../hooks/useSafeAsyncEffect";
 
-const TEST_TYPES = ["vocabulary", "grammar", "reading", "listening", "writing", "speaking"];
-const TEST_SECTIONS = ["midterm", "final", "practice"];
+const SECTION_OPTIONS = [
+  "vocabulary",
+  "grammar",
+  "reading",
+  "listening",
+  "writing",
+  "speaking",
+];
+const EXAM_TYPE_OPTIONS = ["midterm", "final", "practice", "homework"];
+
+const SECTION_OPTIONS_BY_EXAM_TYPE = {
+  final: ["reading", "speaking", "listening", "writing"],
+  midterm: ["vocabulary", "grammar", "speaking"],
+  practice: SECTION_OPTIONS,
+  homework: SECTION_OPTIONS,
+};
+
+const EXAM_TYPE_HELPER_TEXT = {
+  final:
+    "Final exam faqat Reading, Listening, Writing va Speaking sectionlaridan iborat.",
+  midterm:
+    "Midterm faqat Vocabulary, Grammar va Speaking sectionlaridan iborat.",
+};
+
+const QUESTION_TYPES_BY_SECTION = {
+  vocabulary: ["matching_definitions", "gap_fill_vocabulary"],
+  grammar: [
+    "multiple_choice",
+    "gap_fill_grammar",
+    "choose_correct_option",
+    "matching_grammar",
+    "correct_mistakes",
+  ],
+  speaking: ["speaking_prompt", "picture_comparison", "personal_questions"],
+  writing: ["writing_task"],
+  reading: ["multiple_choice", "true_false_not_given", "matching"],
+  listening: ["multiple_choice"],
+};
+
+const QUESTION_TYPE_HELPER_TEXT = {
+  matching_definitions:
+    "Column A uchun word kiriting, optionlarda Column B definitions yozing.",
+  gap_fill_vocabulary:
+    "Prompt sentence ichida blank bo'ladi, options esa word bank sifatida ishlaydi.",
+  gap_fill_grammar:
+    "Prompt gap-fill grammar savoli, options grammatik javob variantlari.",
+  matching_grammar:
+    "Prompt grammar item, options esa matching qilinadigan grammar choices.",
+  correct_mistakes:
+    "Prompt ichida xato gap yoziladi, correct answer to'g'ri variant bo'ladi.",
+  writing_task: "Writing uchun bitta prompt saqlanadi.",
+  speaking_prompt: "Speaking uchun asosiy prompt saqlanadi.",
+  picture_comparison:
+    "Speaking prompt rasm solishtirish vazifasi sifatida saqlanadi.",
+  personal_questions: "Speaking prompt personal questions sifatida saqlanadi.",
+};
+
+function formatLabel(value) {
+  return String(value)
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getAllowedSections(examType) {
+  return SECTION_OPTIONS_BY_EXAM_TYPE[examType] || SECTION_OPTIONS;
+}
+
+function getAllowedQuestionTypes(section) {
+  return QUESTION_TYPES_BY_SECTION[section] || ["multiple_choice"];
+}
+
+function getDefaultQuestionType(section) {
+  return getAllowedQuestionTypes(section)[0];
+}
+
+function getPromptFieldLabel(questionType) {
+  if (questionType === "matching_definitions") {
+    return "Column A word";
+  }
+
+  if (
+    questionType === "gap_fill_vocabulary" ||
+    questionType === "gap_fill_grammar"
+  ) {
+    return "Sentence with blank";
+  }
+
+  if (questionType === "correct_mistakes") {
+    return "Sentence with mistake";
+  }
+
+  return "Prompt";
+}
+
+function getOptionFieldLabel(questionType, optionIndex) {
+  const optionNumber = optionIndex + 1;
+
+  if (questionType === "matching_definitions") {
+    return `Column B definition ${optionNumber}`;
+  }
+
+  if (questionType === "gap_fill_vocabulary") {
+    return `Word bank item ${optionNumber}`;
+  }
+
+  if (questionType === "gap_fill_grammar") {
+    return `Grammar option ${optionNumber}`;
+  }
+
+  return `Option ${optionNumber}`;
+}
+
+function getCorrectAnswerLabel(questionType) {
+  if (questionType === "matching_definitions") {
+    return "Matching definition";
+  }
+
+  if (questionType === "correct_mistakes") {
+    return "Correct version";
+  }
+
+  return "Correct answer";
+}
+
+function normalizeFormForRules(nextForm) {
+  const allowedSections = getAllowedSections(nextForm.section);
+  const safeSection = allowedSections.includes(nextForm.type)
+    ? nextForm.type
+    : allowedSections[0];
+  const allowedQuestionTypes = getAllowedQuestionTypes(safeSection);
+  const safeQuestionType = allowedQuestionTypes.includes(nextForm.questionType)
+    ? nextForm.questionType
+    : allowedQuestionTypes[0];
+
+  return {
+    ...nextForm,
+    type: safeSection,
+    examType: nextForm.section,
+    questionType: safeQuestionType,
+  };
+}
 
 function createEmptyQuestion() {
   return {
@@ -39,6 +179,7 @@ function createEmptyForm() {
     title: "",
     type: "vocabulary",
     section: "midterm",
+    questionType: getDefaultQuestionType("vocabulary"),
     instructions: "",
     durationMinutes: 10,
     score: 10,
@@ -66,6 +207,17 @@ function TeacherManageTestsPage() {
     () => !["writing", "speaking"].includes(form.type),
     [form.type]
   );
+  const availableSections = useMemo(
+    () => getAllowedSections(form.section),
+    [form.section]
+  );
+  const availableQuestionTypes = useMemo(
+    () => getAllowedQuestionTypes(form.type),
+    [form.type]
+  );
+  const examTypeHelperText = EXAM_TYPE_HELPER_TEXT[form.section] || "";
+  const questionTypeHelperText =
+    QUESTION_TYPE_HELPER_TEXT[form.questionType] || "";
   const midtermCount = tests.filter((test) => test.section === "midterm").length;
   const finalCount = tests.filter((test) => test.section === "final").length;
   const totalQuestions = tests.reduce(
@@ -124,17 +276,53 @@ function TeacherManageTestsPage() {
   }, []);
 
   const openCreateModal = () => {
-    setForm({ ...createEmptyForm(), classId: classes[0]?.id || "" });
+    setForm(
+      normalizeFormForRules({
+        ...createEmptyForm(),
+        classId: classes[0]?.id || "",
+      })
+    );
     setIsModalOpen(true);
   };
 
   const openEditModal = (test) => {
-    setForm({
-      ...test,
-      classId: test.classId || "",
-      questions: test.questions?.length ? test.questions : [createEmptyQuestion()],
-    });
+    setForm(
+      normalizeFormForRules({
+        ...test,
+        classId: test.classId || "",
+        questionType: test.questionType || getDefaultQuestionType(test.type),
+        questions: test.questions?.length ? test.questions : [createEmptyQuestion()],
+      })
+    );
     setIsModalOpen(true);
+  };
+
+  const handleExamTypeChange = (examType) => {
+    setForm((current) =>
+      normalizeFormForRules({
+        ...current,
+        section: examType,
+      })
+    );
+  };
+
+  const handleSectionChange = (section) => {
+    setForm((current) =>
+      normalizeFormForRules({
+        ...current,
+        type: section,
+        questionType: getDefaultQuestionType(section),
+      })
+    );
+  };
+
+  const handleQuestionTypeChange = (questionType) => {
+    setForm((current) =>
+      normalizeFormForRules({
+        ...current,
+        questionType,
+      })
+    );
   };
 
   const handleQuestionChange = (questionId, field, value) => {
@@ -176,15 +364,24 @@ function TeacherManageTestsPage() {
     setSaving(true);
     setError("");
 
+    const normalizedForm = normalizeFormForRules(form);
+    const shouldSaveQuestions = !["writing", "speaking"].includes(
+      normalizedForm.type
+    );
     const payload = {
-      ...form,
-      questions: isQuestionBased
-        ? form.questions.filter(
-            (question) =>
-              question.prompt.trim() &&
-              question.options.every((option) => option.trim()) &&
-              question.correctAnswer
-          )
+      ...normalizedForm,
+      questions: shouldSaveQuestions
+        ? normalizedForm.questions
+            .filter(
+              (question) =>
+                question.prompt.trim() &&
+                question.options.every((option) => option.trim()) &&
+                question.correctAnswer
+            )
+            .map((question) => ({
+              ...question,
+              questionType: normalizedForm.questionType,
+            }))
         : [],
     };
 
@@ -193,12 +390,24 @@ function TeacherManageTestsPage() {
         throw new Error("Avval class tanlang.");
       }
 
-      const savedTest = form.id
-        ? await updateTest(form.id, payload)
+      if (!getAllowedSections(payload.section).includes(payload.type)) {
+        throw new Error("Selected section bu exam type uchun ruxsat etilmagan.");
+      }
+
+      if (!getAllowedQuestionTypes(payload.type).includes(payload.questionType)) {
+        throw new Error("Selected question type bu section uchun ruxsat etilmagan.");
+      }
+
+      if (shouldSaveQuestions && !payload.questions.length) {
+        throw new Error("Kamida bitta to'liq question kiriting.");
+      }
+
+      const savedTest = normalizedForm.id
+        ? await updateTest(normalizedForm.id, payload)
         : await createTest(payload);
 
       setTests((current) =>
-        form.id
+        normalizedForm.id
           ? current.map((item) => (item.id === savedTest.id ? savedTest : item))
           : [savedTest, ...current]
       );
@@ -277,29 +486,29 @@ function TeacherManageTestsPage() {
           />
         </label>
         <label>
-          Section
+          Exam type
           <select
             value={sectionFilter}
             onChange={(event) => setSectionFilter(event.target.value)}
           >
-            <option value="all">All sections</option>
-            {TEST_SECTIONS.map((section) => (
+            <option value="all">All exam types</option>
+            {EXAM_TYPE_OPTIONS.map((section) => (
               <option key={section} value={section}>
-                {section}
+                {formatLabel(section)}
               </option>
             ))}
           </select>
         </label>
         <label>
-          Type
+          Section
           <select
             value={typeFilter}
             onChange={(event) => setTypeFilter(event.target.value)}
           >
-            <option value="all">All types</option>
-            {TEST_TYPES.map((type) => (
+            <option value="all">All sections</option>
+            {SECTION_OPTIONS.map((type) => (
               <option key={type} value={type}>
-                {type}
+                {formatLabel(type)}
               </option>
             ))}
           </select>
@@ -311,9 +520,9 @@ function TeacherManageTestsPage() {
           <article key={test.id} className="card manage-test-card">
             <div className="manage-test-card__top">
               <span className={`manage-test-card__type manage-test-card__type--${test.type}`}>
-                {test.type}
+                {formatLabel(test.type)}
               </span>
-              <span className="pill pill--soft">{test.section}</span>
+              <span className="pill pill--soft">{formatLabel(test.section)}</span>
             </div>
 
             <div className="manage-test-card__body">
@@ -379,6 +588,45 @@ function TeacherManageTestsPage() {
             </div>
             <div className="form-grid">
               <label>
+                Exam Type
+                <select
+                  value={form.section}
+                  onChange={(event) => handleExamTypeChange(event.target.value)}
+                >
+                  {EXAM_TYPE_OPTIONS.map((examType) => (
+                    <option key={examType} value={examType}>
+                      {formatLabel(examType)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Section
+                <select
+                  value={form.type}
+                  onChange={(event) => handleSectionChange(event.target.value)}
+                >
+                  {availableSections.map((section) => (
+                    <option key={section} value={section}>
+                      {formatLabel(section)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Question Type
+                <select
+                  value={form.questionType}
+                  onChange={(event) => handleQuestionTypeChange(event.target.value)}
+                >
+                  {availableQuestionTypes.map((questionType) => (
+                    <option key={questionType} value={questionType}>
+                      {formatLabel(questionType)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 Class
                 <select
                   value={form.classId}
@@ -406,36 +654,6 @@ function TeacherManageTestsPage() {
                 />
               </label>
               <label>
-                Type
-                <select
-                  value={form.type}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, type: event.target.value }))
-                  }
-                >
-                  {TEST_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Section
-                <select
-                  value={form.section}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, section: event.target.value }))
-                  }
-                >
-                  {TEST_SECTIONS.map((section) => (
-                    <option key={section} value={section}>
-                      {section}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
                 Score
                 <input
                   type="number"
@@ -448,6 +666,12 @@ function TeacherManageTestsPage() {
                 />
               </label>
             </div>
+            {examTypeHelperText ? (
+              <p className="manage-test-form__hint">{examTypeHelperText}</p>
+            ) : null}
+            {questionTypeHelperText ? (
+              <p className="manage-test-form__hint">{questionTypeHelperText}</p>
+            ) : null}
           </section>
 
           <section className="manage-test-form__section">
@@ -595,31 +819,31 @@ function TeacherManageTestsPage() {
                     </button>
                   </div>
                   <label>
-                    Prompt
+                    {getPromptFieldLabel(form.questionType)}
                     <input
                       value={question.prompt}
                       onChange={(event) =>
                         handleQuestionChange(question.id, "prompt", event.target.value)
                       }
-                      placeholder="Question prompt"
+                      placeholder={getPromptFieldLabel(form.questionType)}
                     />
                   </label>
                   <div className="form-grid">
                     {question.options.map((option, optionIndex) => (
                       <label key={`${question.id}-${optionIndex}`}>
-                        Option {optionIndex + 1}
+                        {getOptionFieldLabel(form.questionType, optionIndex)}
                         <input
                           value={option}
                           onChange={(event) =>
                             handleOptionChange(question.id, optionIndex, event.target.value)
                           }
-                          placeholder={`Option ${optionIndex + 1}`}
+                          placeholder={getOptionFieldLabel(form.questionType, optionIndex)}
                         />
                       </label>
                     ))}
                   </div>
                   <label>
-                    Correct answer
+                    {getCorrectAnswerLabel(form.questionType)}
                     <select
                       value={question.correctAnswer}
                       onChange={(event) =>

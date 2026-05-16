@@ -158,6 +158,52 @@ function getFallbackTest(type, examType) {
   return test || null;
 }
 
+const defaultQuestionTypesByType = {
+  vocabulary: "matching_definitions",
+  grammar: "multiple_choice",
+  reading: "multiple_choice",
+  listening: "multiple_choice",
+  writing: "writing_task",
+  speaking: "speaking_prompt",
+};
+
+function buildMatchingDataFromQuestions(payload, questions) {
+  if (payload.questionType !== "matching_definitions" || !questions.length) {
+    return payload.matchingData || null;
+  }
+
+  const definitions = [];
+  const definitionKeyByText = new Map();
+
+  questions.forEach((question) => {
+    (question.options || []).forEach((option) => {
+      const text = String(option || "").trim();
+
+      if (!text || definitionKeyByText.has(text)) {
+        return;
+      }
+
+      const key = String.fromCharCode(65 + definitions.length);
+      definitionKeyByText.set(text, key);
+      definitions.push({ key, text });
+    });
+  });
+
+  const words = questions.map((question, index) => ({
+    id: question.id || index + 1,
+    term: question.prompt,
+    correct:
+      definitionKeyByText.get(String(question.correctAnswer || "").trim()) || "",
+  }));
+
+  return {
+    title: payload.title || "Vocabulary matching",
+    instruction: payload.instructions || "",
+    words,
+    definitions,
+  };
+}
+
 function mapDbTest(row) {
   if (!row) {
     return null;
@@ -179,6 +225,8 @@ function mapDbTest(row) {
     durationMinutes: Number(data.durationMinutes || 10),
     score: Number(data.score || 10),
     level: data.level || "Intermediate",
+    questionType:
+      data.questionType || defaultQuestionTypesByType[type] || "multiple_choice",
     prompt: data.prompt || "",
     taskTitle: data.taskTitle || row.title,
     passageTitle: data.passageTitle || "",
@@ -190,7 +238,7 @@ function mapDbTest(row) {
     questions: data.questions || [],
     matchingData:
       type === "vocabulary" && examType === "midterm"
-        ? vocabularyMatchingData
+        ? data.matchingData || vocabularyMatchingData
         : data.matchingData,
     createdAt: row.created_at,
   };
@@ -198,7 +246,14 @@ function mapDbTest(row) {
 
 function toDbRecord(payload, teacherId) {
   const type = payload.type || payload.section || "mixed";
-  const examType = payload.examType || payload.section || "practice";
+  const examType = payload.section || payload.examType || "practice";
+  const questionType =
+    payload.questionType || defaultQuestionTypesByType[type] || "multiple_choice";
+  const questions = payload.questions || [];
+  const matchingData = buildMatchingDataFromQuestions(
+    { ...payload, questionType },
+    questions
+  );
 
   return {
     teacher_id: payload.teacherId || payload.teacher_id || teacherId,
@@ -211,6 +266,7 @@ function toDbRecord(payload, teacherId) {
       durationMinutes: Number(payload.durationMinutes) || 10,
       score: Number(payload.score) || 10,
       level: payload.level || "Intermediate",
+      questionType,
       prompt: payload.prompt || "",
       taskTitle: payload.taskTitle || payload.title,
       passageTitle: payload.passageTitle || "",
@@ -219,8 +275,8 @@ function toDbRecord(payload, teacherId) {
       audioUrl: payload.audioUrl || "",
       audioTitle: payload.audioTitle || "",
       topic: payload.topic || "",
-      questions: payload.questions || [],
-      matchingData: payload.matchingData || null,
+      questions,
+      matchingData,
     },
   };
 }

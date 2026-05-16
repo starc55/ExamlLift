@@ -34,6 +34,7 @@ import {
   validateContentFile,
 } from "../../services/content/contentService";
 import { useSafeAsyncEffect } from "../../hooks/useSafeAsyncEffect";
+import { logger } from "../../utils/logger";
 
 const initialForm = {
   title: "",
@@ -227,7 +228,7 @@ function TeacherUploadContentPage() {
     const activeTimers = new Set();
     const startTimer = (label) => {
       activeTimers.add(label);
-      console.time(label);
+      logger.time(label);
     };
     const endTimer = (label) => {
       if (!activeTimers.has(label)) {
@@ -235,7 +236,7 @@ function TeacherUploadContentPage() {
       }
 
       activeTimers.delete(label);
-      console.timeEnd(label);
+      logger.timeEnd(label);
     };
 
     startTimer("SAVE_TOTAL");
@@ -255,7 +256,7 @@ function TeacherUploadContentPage() {
         throw new Error("Teacher account not found. Please log in again.");
       }
       endTimer("VALIDATION");
-      console.log("validation done");
+      logger.info("validation done");
 
       startTimer("FILE_UPLOAD");
       const uploadedUrls = await uploadContentFiles(files, {
@@ -265,12 +266,12 @@ function TeacherUploadContentPage() {
           setStatusMessage(progress.message);
         },
       });
-      console.log("content upload urls", uploadedUrls);
+      logger.info("content upload urls", uploadedUrls);
       const { imageUrl, audioUrl, pdfUrl } = uploadedUrls;
       endTimer("FILE_UPLOAD");
-      console.log("content upload done");
-      console.log("upload done");
-      console.log("public url done", {
+      logger.info("content upload done");
+      logger.info("upload done");
+      logger.info("public url done", {
         image: Boolean(imageUrl),
         audio: Boolean(audioUrl),
         pdf: Boolean(pdfUrl),
@@ -295,15 +296,15 @@ function TeacherUploadContentPage() {
         teacherId: currentUserId,
       };
       endTimer("BUILD_PAYLOAD");
-      console.log("content save cleaned payload", {
+      logger.info("content save cleaned payload", {
         payloadSize: getPayloadSize(savePayload),
         lessonNotesLength: savePayload.lessonNotes?.length || 0,
       });
       startTimer("DB_INSERT");
       const savedContent = await createContent(savePayload);
       endTimer("DB_INSERT");
-      console.log("content insert done");
-      console.log("db insert done");
+      logger.info("content insert done");
+      logger.info("db insert done");
 
       startTimer("SET_SUCCESS_STATE");
       setStatusTone("success");
@@ -317,11 +318,11 @@ function TeacherUploadContentPage() {
       });
       endTimer("SET_SUCCESS_STATE");
       startTimer("AFTER_SAVE_REFRESH");
-      console.log("after-save refresh skipped");
+      logger.info("after-save refresh skipped");
       endTimer("AFTER_SAVE_REFRESH");
-      console.log("refresh done");
+      logger.info("refresh done");
     } catch (requestError) {
-      console.error("Teacher content save failed:", requestError);
+      logger.error("Teacher content save failed:", requestError);
       setStatusTone("error");
       setStatusMessage(
         requestError.message || "Content upload failed. Please try again."
@@ -339,8 +340,8 @@ function TeacherUploadContentPage() {
       endTimer("AFTER_SAVE_REFRESH");
       submitLockRef.current = false;
       setIsSubmitting(false);
-      console.log("saving false");
-      console.log("setSaving false done");
+      logger.info("saving false");
+      logger.info("setSaving false done");
       endTimer("SAVE_TOTAL");
     }
   }, [classes, currentUserId, files, form]);

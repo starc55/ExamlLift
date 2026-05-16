@@ -1,15 +1,15 @@
-import { useEffect } from "react";
 import {
   BrowserRouter,
   Navigate,
   Route,
   Routes,
-  useLocation,
 } from "react-router-dom";
 import LoadingScreen from "../components/LoadingScreen";
 import Layout from "../components/layout/Layout";
+import SEOManager from "../components/seo/SEOManager";
 import { getDefaultRouteByRole, ROLES } from "../constants/roles";
 import { useAuth } from "../context/AuthContext";
+import NotFoundPage from "../pages/NotFoundPage";
 import LoginPage from "../pages/auth/LoginPage";
 import RegisterPage from "../pages/auth/RegisterPage";
 import StudentContentDetailPage from "../pages/student/StudentContentDetailPage";
@@ -52,23 +52,10 @@ function RootRedirect() {
   return <Navigate to={getDefaultRouteByRole(currentUser.role)} replace />;
 }
 
-function RouteChangeLogger() {
-  const location = useLocation();
-
-  useEffect(() => {
-    console.info("[route] changed", {
-      pathname: location.pathname,
-      search: location.search,
-    });
-  }, [location.pathname, location.search]);
-
-  return null;
-}
-
 function AppRouter() {
   return (
     <BrowserRouter>
-      <RouteChangeLogger />
+      <SEOManager />
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
@@ -105,7 +92,7 @@ function AppRouter() {
           </Route>
         </Route>
 
-        <Route path="*" element={<RootRedirect />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>
   );

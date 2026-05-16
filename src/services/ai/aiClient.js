@@ -2,6 +2,7 @@ import {
   getSavedFeedbackLanguage,
   normalizeFeedbackLanguage,
 } from "./feedbackLanguage";
+import { logger } from "../../utils/logger";
 
 const AI_ERROR_MESSAGE = "AI feedback olishda xatolik yuz berdi.";
 
@@ -21,7 +22,7 @@ async function requestJson(url, options) {
     const error = new Error(payload?.error || AI_ERROR_MESSAGE);
     error.status = response.status;
     error.details = payload?.details || null;
-    console.error("AI feedback error:", error.details || error.message);
+    logger.error("AI feedback error:", error.details || error.message);
     throw error;
   }
 

@@ -1,4 +1,5 @@
 import { assertSupabaseConfig, supabase } from "../../lib/supabaseClient";
+import { logger } from "../../utils/logger";
 
 const CONTENT_BUCKET = "content-files";
 const IMAGE_MAX_BYTES = 2 * 1024 * 1024;
@@ -236,7 +237,7 @@ function normalizeDetailSections(sections) {
 async function withSlowDetailsWarning(promise, details = {}) {
   const startedAt = Date.now();
   const warningTimer = setTimeout(() => {
-    console.warn("INSERT_CONTENT_DETAILS exceeded 5000ms", {
+    logger.warn("INSERT_CONTENT_DETAILS exceeded 5000ms", {
       ...details,
       elapsedMs: Date.now() - startedAt,
     });
@@ -462,7 +463,7 @@ function getDebugFileInfo(file) {
 }
 
 function logContentUploadStep(step, details = {}) {
-  console.info(`[content-upload] ${step}`, details);
+  logger.info(`[content-upload] ${step}`, details);
 }
 
 function isPdfFile(file) {
@@ -609,7 +610,7 @@ async function getCurrentUserId() {
   const { data, error } = await supabase.auth.getUser();
 
   if (error) {
-    console.error("Supabase user lookup failed:", error);
+    logger.error("Supabase user lookup failed:", error);
     throw error;
   }
 
@@ -652,7 +653,7 @@ export async function uploadContentFile(file, teacherId, options = {}) {
     });
 
   if (error) {
-    console.error("[content-upload] upload failed", {
+    logger.error("[content-upload] upload failed", {
       kind,
       index: uploadIndex,
       bucket: CONTENT_BUCKET,
@@ -752,7 +753,7 @@ export async function uploadContentFiles(files = {}, options = {}) {
 
       entries.push([item.key, publicUrl]);
     } catch (error) {
-      console.error("[content-upload] upload failed", {
+      logger.error("[content-upload] upload failed", {
         kind: item.key,
         index,
         file: getDebugFileInfo(item.file),
@@ -795,15 +796,15 @@ export async function createContent(payload) {
     sections: [],
   });
 
-  console.log("content save payload metrics", metrics);
+  logger.info("content save payload metrics", metrics);
   logContentUploadStep("db insert payload metrics", metrics);
 
-  console.log("contents insert payload", {
+  logger.info("contents insert payload", {
     keys: Object.keys(record),
     file_url: Boolean(record.file_url),
     descriptionLength: record.description?.length || 0,
   });
-  console.time("INSERT_CONTENTS");
+  logger.time("INSERT_CONTENTS");
   let contentResponse;
 
   try {
@@ -813,26 +814,26 @@ export async function createContent(payload) {
       .select(CONTENT_LIST_SELECT)
       .single();
   } finally {
-    console.timeEnd("INSERT_CONTENTS");
+    logger.timeEnd("INSERT_CONTENTS");
   }
 
   const { data, error: contentError } = contentResponse;
 
   if (contentError) {
-    console.error("[content-upload] db insert error", {
+    logger.error("[content-upload] db insert error", {
       record,
       error: contentError,
     });
     throw contentError;
   }
 
-  console.log("content metadata insert done", { id: data.id });
+  logger.info("content metadata insert done", { id: data.id });
   const detailRecord = buildContentDetailRecord(cleanedPayload, data.id);
   const detailMetrics = getContentPayloadMetrics(cleanedPayload, detailRecord);
-  console.log("content detail payload metrics", detailMetrics);
+  logger.info("content detail payload metrics", detailMetrics);
 
   if (!hasContentDetails(detailRecord)) {
-    console.log("content_details insert skipped", {
+    logger.info("content_details insert skipped", {
       contentId: data.id,
       reason: "empty details",
     });
@@ -840,7 +841,7 @@ export async function createContent(payload) {
     return mapContentListItem(data);
   }
 
-  console.log("content_details insert payload", {
+  logger.info("content_details insert payload", {
     keys: Object.keys(detailRecord),
     content_id: detailRecord.content_id,
     bodyLength: detailRecord.body.length,
@@ -850,7 +851,7 @@ export async function createContent(payload) {
     assignmentInstructionsLength: detailRecord.assignment_instructions.length,
   });
 
-  console.time("INSERT_CONTENT_DETAILS");
+  logger.time("INSERT_CONTENT_DETAILS");
   let detailResponse;
 
   try {
@@ -863,13 +864,13 @@ export async function createContent(payload) {
       }
     );
   } finally {
-    console.timeEnd("INSERT_CONTENT_DETAILS");
+    logger.timeEnd("INSERT_CONTENT_DETAILS");
   }
 
   const { error: detailError } = detailResponse;
 
   if (detailError) {
-    console.error("[content-upload] detail insert error", {
+    logger.error("[content-upload] detail insert error", {
       contentId: data.id,
       body_length: detailRecord.body?.length || 0,
       sections_count: detailRecord.sections?.length || 0,
@@ -878,7 +879,7 @@ export async function createContent(payload) {
     throw detailError;
   }
 
-  console.log("content details insert done", { id: data.id });
+  logger.info("content details insert done", { id: data.id });
   logContentUploadStep("db insert success", { id: data.id });
   return mapContentListItem(data, detailRecord.asset_urls);
 }
@@ -899,10 +900,10 @@ export async function updateContent(id, payload) {
   const detailRecord = buildContentDetailRecord(cleanedPayload, id);
   const metrics = getContentPayloadMetrics(cleanedPayload, detailRecord);
 
-  console.log("content save payload metrics", { id, ...metrics });
+  logger.info("content save payload metrics", { id, ...metrics });
   logContentUploadStep("db update payload metrics", { id, ...metrics });
 
-  console.time("INSERT_CONTENTS");
+  logger.time("INSERT_CONTENTS");
   let contentResponse;
 
   try {
@@ -913,13 +914,13 @@ export async function updateContent(id, payload) {
       .select(CONTENT_LIST_SELECT)
       .single();
   } finally {
-    console.timeEnd("INSERT_CONTENTS");
+    logger.timeEnd("INSERT_CONTENTS");
   }
 
   const { data, error: contentError } = contentResponse;
 
   if (contentError) {
-    console.error("[content-upload] db update error", {
+    logger.error("[content-upload] db update error", {
       id,
       record,
       error: contentError,
@@ -927,10 +928,10 @@ export async function updateContent(id, payload) {
     throw contentError;
   }
 
-  console.log("content metadata update done", { id: data.id });
+  logger.info("content metadata update done", { id: data.id });
 
   if (!hasContentDetails(detailRecord)) {
-    console.log("content_details update skipped", {
+    logger.info("content_details update skipped", {
       contentId: id,
       reason: "empty details",
     });
@@ -938,7 +939,7 @@ export async function updateContent(id, payload) {
     return mapContentListItem(data);
   }
 
-  console.time("INSERT_CONTENT_DETAILS");
+  logger.time("INSERT_CONTENT_DETAILS");
   let detailResponse;
 
   try {
@@ -953,13 +954,13 @@ export async function updateContent(id, payload) {
       }
     );
   } finally {
-    console.timeEnd("INSERT_CONTENT_DETAILS");
+    logger.timeEnd("INSERT_CONTENT_DETAILS");
   }
 
   const { error: detailError } = detailResponse;
 
   if (detailError) {
-    console.error("[content-upload] detail upsert error", {
+    logger.error("[content-upload] detail upsert error", {
       contentId: id,
       body_length: detailRecord.body?.length || 0,
       sections_count: detailRecord.sections?.length || 0,
@@ -968,7 +969,7 @@ export async function updateContent(id, payload) {
     throw detailError;
   }
 
-  console.log("content details update done", { id: data.id });
+  logger.info("content details update done", { id: data.id });
   logContentUploadStep("db update success", { id: data.id });
   return mapContentListItem(data, detailRecord.asset_urls);
 }

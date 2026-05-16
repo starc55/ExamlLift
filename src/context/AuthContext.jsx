@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { logger } from "../utils/logger";
 import {
   assertSupabaseConfig,
   hasSupabaseConfig,
@@ -46,20 +47,20 @@ async function fetchProfile(user, options = {}) {
   const force = Boolean(options.force);
 
   if (!force && profileCache.has(user.id)) {
-    console.info("[auth] profile cache hit", { userId: user.id });
+    logger.info("[auth] profile cache hit", { userId: user.id });
     return normalizeProfile(profileCache.get(user.id), user);
   }
 
   if (!force && profileRequests.has(user.id)) {
-    console.info("[auth] profile request deduped", { userId: user.id });
+    logger.info("[auth] profile request deduped", { userId: user.id });
     return profileRequests.get(user.id);
   }
 
-  console.info("[auth] profile fetch started", { userId: user.id });
+  logger.info("[auth] profile fetch started", { userId: user.id });
   const request = fetchProfileFromSupabase(user)
     .then((profile) => {
       profileCache.set(user.id, profile);
-      console.info("[auth] profile fetch finished", { userId: user.id });
+      logger.info("[auth] profile fetch finished", { userId: user.id });
       return profile;
     })
     .finally(() => {
@@ -158,7 +159,7 @@ export function AuthProvider({ children }) {
     }
 
     const initStartedAt = Date.now();
-    console.info("[auth] initial session request started");
+    logger.info("[auth] initial session request started");
 
     supabase.auth.getSession().then(async ({ data, error }) => {
       if (!isMounted) {
@@ -192,7 +193,7 @@ export function AuthProvider({ children }) {
         }
       } finally {
         if (isMounted) {
-          console.info("[auth] initial session request finished", {
+          logger.info("[auth] initial session request finished", {
             elapsedMs: Date.now() - initStartedAt,
           });
           setLoading(false);
@@ -206,7 +207,7 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        console.info("[auth] state changed", {
+        logger.info("[auth] state changed", {
           event: _event,
           hasSession: Boolean(nextSession),
         });

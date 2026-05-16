@@ -23,7 +23,7 @@ function Sidebar({ isOpen, onClose }) {
             alt="English learning platform"
           />
           <div>
-            <strong>ExamLift</strong>
+            <strong>AESAC</strong>
             <p>{ROLE_LABELS[currentUser?.role] || "Learning"} workspace</p>
           </div>
         </motion.div>
@@ -60,7 +60,7 @@ function Sidebar({ isOpen, onClose }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.3 }}
         >
-          <p>ExamLift v0.1</p>
+          <p>AESAC v0.1</p>
         </motion.div>
       </aside>
       <AnimatePresence>

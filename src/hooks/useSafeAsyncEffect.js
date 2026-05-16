@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { logger } from "../utils/logger";
 
 const DEFAULT_TIMEOUT_MS = 10000;
 
@@ -14,7 +15,7 @@ export function useSafeAsyncEffect(label, effect, dependencies, options = {}) {
     const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
     const timeoutId = window.setTimeout(() => {
       if (active && !controller.signal.aborted) {
-        console.warn("[request] long-running", {
+        logger.warn("[request] long-running", {
           label,
           requestId,
           elapsedMs: Date.now() - startedAt,
@@ -22,7 +23,7 @@ export function useSafeAsyncEffect(label, effect, dependencies, options = {}) {
       }
     }, timeoutMs);
 
-    console.info("[request] started", { label, requestId });
+    logger.info("[request] started", { label, requestId });
 
     const helpers = {
       signal: controller.signal,
@@ -34,7 +35,7 @@ export function useSafeAsyncEffect(label, effect, dependencies, options = {}) {
           return true;
         }
 
-        console.info("[request] state update skipped", { label, requestId });
+        logger.info("[request] state update skipped", { label, requestId });
         return false;
       },
     };
@@ -43,7 +44,7 @@ export function useSafeAsyncEffect(label, effect, dependencies, options = {}) {
       .then(() => effect(helpers))
       .then(() => {
         if (active && !controller.signal.aborted) {
-          console.info("[request] finished", {
+          logger.info("[request] finished", {
             label,
             requestId,
             elapsedMs: Date.now() - startedAt,
@@ -52,7 +53,7 @@ export function useSafeAsyncEffect(label, effect, dependencies, options = {}) {
       })
       .catch((error) => {
         if (controller.signal.aborted || error?.name === "AbortError") {
-          console.info("[request] aborted", {
+          logger.info("[request] aborted", {
             label,
             requestId,
             elapsedMs: Date.now() - startedAt,
@@ -60,7 +61,7 @@ export function useSafeAsyncEffect(label, effect, dependencies, options = {}) {
           return;
         }
 
-        console.error("[request] failed", {
+        logger.error("[request] failed", {
           label,
           requestId,
           elapsedMs: Date.now() - startedAt,
@@ -72,7 +73,7 @@ export function useSafeAsyncEffect(label, effect, dependencies, options = {}) {
       active = false;
       controller.abort();
       window.clearTimeout(timeoutId);
-      console.info("[request] aborted", {
+      logger.info("[request] aborted", {
         label,
         requestId,
         reason: "component unmounted",

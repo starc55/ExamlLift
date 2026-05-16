@@ -424,6 +424,53 @@ pre {
   font-weight: 700;
 }
 
+.not-found-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(202, 162, 77, 0.16), transparent 34%),
+    linear-gradient(180deg, #fffaf4, #f6ece2);
+}
+
+.not-found-card {
+  width: min(560px, 100%);
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+  padding: 32px;
+  border-radius: 24px;
+  border: 1px solid rgba(202, 162, 77, 0.28);
+  background: rgba(255, 252, 248, 0.95);
+  box-shadow: 0 30px 80px rgba(77, 12, 22, 0.14);
+}
+
+.not-found-card__logo {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+}
+
+.not-found-card h1 {
+  margin: 0;
+  color: var(--primary-dark);
+  font-size: 2rem;
+}
+
+.not-found-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.not-found-card__actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
 .demo-credentials {
   display: grid;
   gap: 14px;
